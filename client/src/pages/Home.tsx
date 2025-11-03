@@ -335,18 +335,24 @@ export default function Home() {
             </div>
           ) : (
             <div data-testid="conversations-list">
-              {filteredConversations.map((conversation) => (
-                <ConversationListItem
-                  key={conversation.id}
-                  conversation={conversation}
-                  currentUserId={user!.id}
-                  isActive={conversation.id === selectedConversationId}
-                  onClick={() => {
-                    setSelectedConversationId(conversation.id);
-                    setIsMobileMenuOpen(false);
-                  }}
-                />
-              ))}
+              {filteredConversations.map((conversation) => {
+                const otherUserId = conversation.participants.find(p => p.userId !== user!.id)?.userId;
+                const isOnline = otherUserId ? onlineUsers.has(otherUserId) : false;
+                
+                return (
+                  <ConversationListItem
+                    key={conversation.id}
+                    conversation={conversation}
+                    currentUserId={user!.id}
+                    isActive={conversation.id === selectedConversationId}
+                    isOnline={!conversation.isGroup ? isOnline : undefined}
+                    onClick={() => {
+                      setSelectedConversationId(conversation.id);
+                      setIsMobileMenuOpen(false);
+                    }}
+                  />
+                );
+              })}
             </div>
           )}
         </ScrollArea>

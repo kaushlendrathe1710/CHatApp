@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { OnlineStatus } from "@/components/OnlineStatus";
 import { formatChatListTime, getUserDisplayName } from "@/lib/formatters";
 import type { ConversationWithDetails } from "@shared/schema";
 import { Users } from "lucide-react";
@@ -10,13 +11,15 @@ interface ConversationListItemProps {
   currentUserId: string;
   isActive?: boolean;
   onClick?: () => void;
+  isOnline?: boolean;
 }
 
 export function ConversationListItem({
   conversation,
   currentUserId,
   isActive,
-  onClick
+  onClick,
+  isOnline
 }: ConversationListItemProps) {
   const otherParticipants = conversation.participants.filter(
     p => p.userId !== currentUserId
@@ -82,6 +85,13 @@ export function ConversationListItem({
             )}
           </AvatarFallback>
         </Avatar>
+        {!conversation.isGroup && isOnline !== undefined && (
+          <OnlineStatus
+            isOnline={isOnline}
+            size="sm"
+            className="absolute bottom-0 right-0"
+          />
+        )}
       </div>
 
       <div className="flex-1 min-w-0">
