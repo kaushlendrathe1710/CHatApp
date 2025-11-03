@@ -1,0 +1,117 @@
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { formatChatListTime, getUserDisplayName } from "@/lib/formatters";
+import type { ConversationWithDetails } from "@shared/schema";
+import { Users } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface ConversationListItemProps {
+  conversation: ConversationWithDetails;
+  currentUserId: string;
+  isActive?: boolean;
+  onClick?: () => void;
+}
+
+export function ConversationListItem({
+  conversation,
+  currentUserId,
+  isActive,
+  onClick
+}: ConversationListItemProps) {
+  const otherParticipants = conversation.participants.filter(
+    p => p.userId !== currentUserId
+  );
+
+  const getConversationName = () => {
+    if (conversation.isGroup && conversation.name) {
+      return conversation.name;
+    }
+    if (otherParticipants.length > 0) {
+      return getUserDisplayName(otherParticipants[0].user);
+    }
+    return 'Unknown';
+  };
+
+  const getConversationAvatar = () => {
+    if (conversation.avatarUrl) {
+      return conversation.avatarUrl;
+    }
+    if (!conversation.isGroup && otherParticipants.length > 0) {
+      return otherParticipants[0].user.profileImageUrl || undefined;
+    }
+    return undefined;
+  };
+
+  const getInitials = () => {
+    const name = getConversationName();
+    return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  };
+
+  const getLastMessagePreview = () => {
+    if (!conversation.lastMessage) {
+      return 'No messages yet';
+    }
+    
+    const msg = conversation.lastMessage;
+    if (msg.type === 'image') {
+      return '📷 Photo';
+    }
+    if (msg.type === 'file') {
+      return '📎 ' + (msg.fileName || 'File');
+    }
+    return msg.content || '';
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-3 p-4 hover-elevate active-elevate-2 transition-colors text-left border-b border-border",
+        isActive && "bg-accent"
+      )}
+      data-testid={`conversation-item-${conversation.id}`}
+    >
+      <div className="relative flex-shrink-0">
+        <Avatar className="h-12 w-12" data-testid="avatar-conversation">
+          <AvatarImage src={getConversationAvatar()} style={{ objectFit: 'cover' }} />
+          <AvatarFallback>
+            {conversation.isGroup ? (
+              <Users className="h-5 w-5" />
+            ) : (
+              getInitials()
+            )}
+          </AvatarFallback>
+        </Avatar>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h3 className="font-medium truncate" data-testid="text-conversation-name">
+            {getConversationName()}
+          </h3>
+          {conversation.lastMessage && (
+            <span className="text-xs text-muted-foreground flex-shrink-0" data-testid="text-last-message-time">
+              {formatChatListTime(conversation.lastMessage.createdAt!)}
+            </span>
+          )}
+        </div>
+        
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground truncate" data-testid="text-last-message">
+            {getLastMessagePreview()}
+          </p>
+          
+          {conversation.unreadCount !== undefined && conversation.unreadCount > 0 && (
+            <Badge 
+              variant="default" 
+              className="flex-shrink-0 h-5 min-w-[20px] px-1.5 rounded-full"
+              data-testid="badge-unread-count"
+            >
+              {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+            </Badge>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
