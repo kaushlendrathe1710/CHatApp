@@ -36,6 +36,7 @@ export interface IStorage {
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessageStatus(messageId: string, status: string): Promise<void>;
   updateConversationReadStatus(conversationId: string, userId: string): Promise<void>;
+  markMessagesAsRead(conversationId: string, userId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -238,6 +239,22 @@ export class DatabaseStorage implements IStorage {
           eq(conversationParticipants.userId, userId)
         )
       );
+  }
+
+  async markMessagesAsRead(conversationId: string, userId: string): Promise<number> {
+    const result = await db
+      .update(messages)
+      .set({ status: 'read' })
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          sql`${messages.senderId} != ${userId}`,
+          sql`${messages.status} != 'read'`
+        )
+      )
+      .returning({ id: messages.id });
+    
+    return result.length;
   }
 }
 

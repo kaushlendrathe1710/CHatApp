@@ -111,8 +111,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Mark messages as read
       await storage.updateConversationReadStatus(conversationId, userId);
+      const updatedCount = await storage.markMessagesAsRead(conversationId, userId);
       
       const messages = await storage.getConversationMessages(conversationId);
+      
+      // Only broadcast if messages were actually marked as read
+      if (updatedCount > 0) {
+        broadcastToConversation(conversationId, {
+          type: 'status_update',
+          data: { 
+            conversationId,
+            status: 'read',
+            userId,
+          },
+        });
+      }
+      
       res.json(messages);
     } catch (error) {
       console.error("Error fetching messages:", error);

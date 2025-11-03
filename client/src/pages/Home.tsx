@@ -95,7 +95,10 @@ export default function Home() {
       } else if (message.type === 'presence') {
         setOnlineUsers(new Set(message.data.onlineUserIds));
       } else if (message.type === 'status_update') {
-        queryClient.invalidateQueries({ queryKey: ['/api/messages', message.data.conversationId] });
+        // Only invalidate if the status update came from another user
+        if (message.data.userId !== user?.id) {
+          queryClient.invalidateQueries({ queryKey: ['/api/messages', message.data.conversationId] });
+        }
       }
     } catch (error) {
       console.error('Error handling WebSocket message:', error);
