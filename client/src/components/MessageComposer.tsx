@@ -3,14 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Paperclip, Send, Smile } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-
-// Simple emoji picker data
-const EMOJI_CATEGORIES = {
-  'Smileys': ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳'],
-  'Gestures': ['👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💪', '🦵', '🦶'],
-  'Hearts': ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝'],
-  'Objects': ['🎉', '🎊', '🎁', '🎈', '🎀', '🎂', '🍰', '🧁', '🍕', '🍔', '🍟', '🌭', '🍿', '🧋', '🥤', '☕', '🍵', '🍺', '🍻', '🥂', '🍷', '📱', '💻', '⌨️', '🖱️', '🖨️', '📷', '📸', '📹'],
-};
+import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 
 interface MessageComposerProps {
   onSendMessage: (content: string) => void;
@@ -48,8 +41,8 @@ export function MessageComposer({
     }
   };
 
-  const handleEmojiClick = (emoji: string) => {
-    setMessage(prev => prev + emoji);
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setMessage(prev => prev + emojiData.emoji);
     setEmojiOpen(false);
     textareaRef.current?.focus();
   };
@@ -93,26 +86,15 @@ export function MessageComposer({
               <Smile className="h-5 w-5" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-80 p-3" align="start" side="top">
-            <div className="space-y-3 max-h-80 overflow-y-auto">
-              {Object.entries(EMOJI_CATEGORIES).map(([category, emojis]) => (
-                <div key={category}>
-                  <h4 className="text-xs font-medium text-muted-foreground mb-2">{category}</h4>
-                  <div className="grid grid-cols-8 gap-1">
-                    {emojis.map((emoji) => (
-                      <button
-                        key={emoji}
-                        onClick={() => handleEmojiClick(emoji)}
-                        className="p-2 hover-elevate active-elevate-2 rounded-md text-xl"
-                        data-testid={`emoji-${emoji}`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+          <PopoverContent className="w-auto p-0 border-0" align="start" side="top">
+            <EmojiPicker
+              onEmojiClick={handleEmojiClick}
+              theme={Theme.AUTO}
+              width={350}
+              height={400}
+              searchPlaceholder="Search emoji..."
+              previewConfig={{ showPreview: false }}
+            />
           </PopoverContent>
         </Popover>
 
