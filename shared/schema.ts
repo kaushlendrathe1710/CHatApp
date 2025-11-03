@@ -91,20 +91,46 @@ export const messages = pgTable("messages", {
   fileName: varchar("file_name"),
   fileSize: integer("file_size"),
   status: text("status").default("sent").notNull(), // sent, delivered, read
+  replyToId: varchar("reply_to_id").references((): any => messages.id),
+  isEdited: boolean("is_edited").default(false),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at"),
 }, (table) => [
   index("idx_messages_conversation").on(table.conversationId),
   index("idx_messages_created").on(table.createdAt),
+  index("idx_messages_reply_to").on(table.replyToId),
 ]);
 
 export const insertMessageSchema = createInsertSchema(messages).omit({
   id: true,
   createdAt: true,
   status: true,
+  isEdited: true,
+  updatedAt: true,
 });
 
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
+
+// Message reactions table
+export const messageReactions = pgTable("message_reactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").references(() => messages.id, { onDelete: 'cascade' }).notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  emoji: varchar("emoji").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_reactions_message").on(table.messageId),
+  index("idx_reactions_user").on(table.userId),
+]);
+
+export const insertMessageReactionSchema = createInsertSchema(messageReactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMessageReaction = z.infer<typeof insertMessageReactionSchema>;
+export type MessageReaction = typeof messageReactions.$inferSelect;
 
 // Typing indicators (ephemeral, tracked via WebSocket)
 export type TypingIndicator = {
@@ -147,13 +173,29 @@ export const conversationParticipantsRelations = relations(conversationParticipa
   }),
 }));
 
-export const messagesRelations = relations(messages, ({ one }) => ({
+export const messagesRelations = relations(messages, ({ one, many }) => ({
   conversation: one(conversations, {
     fields: [messages.conversationId],
     references: [conversations.id],
   }),
   sender: one(users, {
     fields: [messages.senderId],
+    references: [users.id],
+  }),
+  replyTo: one(messages, {
+    fields: [messages.replyToId],
+    references: [messages.id],
+  }),
+  reactions: many(messageReactions),
+}));
+
+export const messageReactionsRelations = relations(messageReactions, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageReactions.messageId],
+    references: [messages.id],
+  }),
+  user: one(users, {
+    fields: [messageReactions.userId],
     references: [users.id],
   }),
 }));
@@ -165,6 +207,12 @@ export type ConversationWithDetails = Conversation & {
   unreadCount?: number;
 };
 
+export type MessageReactionWithUser = MessageReaction & {
+  user: User;
+};
+
 export type MessageWithSender = Message & {
   sender: User;
+  reactions?: MessageReactionWithUser[];
+  replyTo?: Message & { sender: User };
 };

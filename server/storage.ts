@@ -3,6 +3,7 @@ import {
   conversations,
   conversationParticipants,
   messages,
+  messageReactions,
   type User,
   type UpsertUser,
   type Conversation,
@@ -11,6 +12,8 @@ import {
   type InsertConversationParticipant,
   type Message,
   type InsertMessage,
+  type MessageReaction,
+  type InsertMessageReaction,
   type ConversationWithDetails,
   type MessageWithSender,
 } from "@shared/schema";
@@ -37,6 +40,12 @@ export interface IStorage {
   updateMessageStatus(messageId: string, status: string): Promise<void>;
   updateConversationReadStatus(conversationId: string, userId: string): Promise<void>;
   markMessagesAsRead(conversationId: string, userId: string): Promise<number>;
+  updateMessage(messageId: string, content: string): Promise<Message>;
+  
+  // Reaction operations
+  addReaction(reaction: InsertMessageReaction): Promise<MessageReaction>;
+  removeReaction(messageId: string, userId: string): Promise<void>;
+  getMessageReactions(messageId: string): Promise<MessageReaction[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -205,9 +214,51 @@ export class DatabaseStorage implements IStorage {
       .where(eq(messages.conversationId, conversationId))
       .orderBy(messages.createdAt);
 
+    const messageIds = msgs.map(m => m.message.id);
+    const replyToIds = msgs.map(m => m.message.replyToId).filter(Boolean) as string[];
+    
+    const reactions = messageIds.length > 0 ? await db
+      .select({
+        reaction: messageReactions,
+        user: users,
+      })
+      .from(messageReactions)
+      .innerJoin(users, eq(messageReactions.userId, users.id))
+      .where(inArray(messageReactions.messageId, messageIds)) : [];
+
+    const repliedMessages = replyToIds.length > 0 ? await db
+      .select({
+        message: messages,
+        sender: users,
+      })
+      .from(messages)
+      .innerJoin(users, eq(messages.senderId, users.id))
+      .where(inArray(messages.id, replyToIds)) : [];
+
+    const reactionsMap = new Map<string, any[]>();
+    reactions.forEach(r => {
+      if (!reactionsMap.has(r.reaction.messageId)) {
+        reactionsMap.set(r.reaction.messageId, []);
+      }
+      reactionsMap.get(r.reaction.messageId)!.push({
+        ...r.reaction,
+        user: r.user,
+      });
+    });
+
+    const repliedMessagesMap = new Map<string, any>();
+    repliedMessages.forEach(r => {
+      repliedMessagesMap.set(r.message.id, {
+        ...r.message,
+        sender: r.sender,
+      });
+    });
+
     return msgs.map(row => ({
       ...row.message,
       sender: row.sender,
+      reactions: reactionsMap.get(row.message.id) || [],
+      replyTo: row.message.replyToId ? repliedMessagesMap.get(row.message.replyToId) : undefined,
     }));
   }
 
@@ -255,6 +306,64 @@ export class DatabaseStorage implements IStorage {
       .returning({ id: messages.id });
     
     return result.length;
+  }
+
+  async updateMessage(messageId: string, content: string): Promise<Message> {
+    const [updated] = await db
+      .update(messages)
+      .set({ 
+        content, 
+        isEdited: true,
+        updatedAt: new Date() 
+      })
+      .where(eq(messages.id, messageId))
+      .returning();
+    return updated;
+  }
+
+  async addReaction(reaction: InsertMessageReaction): Promise<MessageReaction> {
+    const existing = await db
+      .select()
+      .from(messageReactions)
+      .where(
+        and(
+          eq(messageReactions.messageId, reaction.messageId),
+          eq(messageReactions.userId, reaction.userId)
+        )
+      );
+
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(messageReactions)
+        .set({ emoji: reaction.emoji })
+        .where(eq(messageReactions.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+
+    const [newReaction] = await db
+      .insert(messageReactions)
+      .values(reaction)
+      .returning();
+    return newReaction;
+  }
+
+  async removeReaction(messageId: string, userId: string): Promise<void> {
+    await db
+      .delete(messageReactions)
+      .where(
+        and(
+          eq(messageReactions.messageId, messageId),
+          eq(messageReactions.userId, userId)
+        )
+      );
+  }
+
+  async getMessageReactions(messageId: string): Promise<MessageReaction[]> {
+    return await db
+      .select()
+      .from(messageReactions)
+      .where(eq(messageReactions.messageId, messageId));
   }
 }
 

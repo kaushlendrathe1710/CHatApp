@@ -3,15 +3,29 @@ import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import type { MessageWithSender } from "@shared/schema";
 import { Check, CheckCheck, Download, FileText, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MessageReactions } from "@/components/MessageReactions";
 
 interface ChatMessageProps {
   message: MessageWithSender;
   isOwn: boolean;
   showAvatar?: boolean;
   isGroup?: boolean;
+  currentUserId: string;
+  conversationId: string;
+  onAddReaction?: (messageId: string, emoji: string) => void;
+  onRemoveReaction?: (messageId: string) => void;
 }
 
-export function ChatMessage({ message, isOwn, showAvatar = true, isGroup = false }: ChatMessageProps) {
+export function ChatMessage({ 
+  message, 
+  isOwn, 
+  showAvatar = true, 
+  isGroup = false,
+  currentUserId,
+  conversationId,
+  onAddReaction,
+  onRemoveReaction
+}: ChatMessageProps) {
   const senderName = getUserDisplayName(message.sender);
   const initials = senderName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
@@ -110,7 +124,7 @@ export function ChatMessage({ message, isOwn, showAvatar = true, isGroup = false
         )}
         
         <div
-          className={`rounded-2xl px-3 py-2 ${
+          className={`group rounded-2xl px-3 py-2 ${
             isOwn
               ? 'bg-primary text-primary-foreground rounded-br-sm'
               : 'bg-card border border-card-border rounded-bl-sm'
@@ -127,6 +141,16 @@ export function ChatMessage({ message, isOwn, showAvatar = true, isGroup = false
             {renderStatusIcon()}
           </div>
         </div>
+        
+        {/* Reactions */}
+        <MessageReactions
+          messageId={message.id}
+          conversationId={conversationId}
+          reactions={message.reactions || []}
+          currentUserId={currentUserId}
+          onAddReaction={(emoji) => onAddReaction?.(message.id, emoji)}
+          onRemoveReaction={() => onRemoveReaction?.(message.id)}
+        />
       </div>
     </div>
   );

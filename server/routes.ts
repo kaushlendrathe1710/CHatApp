@@ -138,7 +138,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/messages', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { conversationId, content, type, fileUrl, fileName, fileSize } = req.body;
+      const { conversationId, content, type, fileUrl, fileName, fileSize, replyToId } = req.body;
 
       if (!conversationId) {
         return res.status(400).json({ message: "conversationId is required" });
@@ -152,6 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileUrl,
         fileName,
         fileSize,
+        replyToId,
       });
 
       // Broadcast new message via WebSocket
@@ -164,6 +165,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error sending message:", error);
       res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Update a message
+  app.patch('/api/messages/:messageId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { messageId } = req.params;
+      const { content } = req.body;
+
+      if (!content) {
+        return res.status(400).json({ message: "content is required" });
+      }
+
+      const message = await storage.updateMessage(messageId, content);
+      
+      // Broadcast message edit via WebSocket
+      broadcastToConversation(message.conversationId, {
+        type: 'message_edited',
+        data: { messageId, content, conversationId: message.conversationId },
+      });
+
+      res.json(message);
+    } catch (error) {
+      console.error("Error updating message:", error);
+      res.status(500).json({ message: "Failed to update message" });
+    }
+  });
+
+  // Add reaction to message
+  app.post('/api/messages/:messageId/reactions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { messageId } = req.params;
+      const { emoji, conversationId } = req.body;
+
+      if (!emoji) {
+        return res.status(400).json({ message: "emoji is required" });
+      }
+
+      const reaction = await storage.addReaction({
+        messageId,
+        userId,
+        emoji,
+      });
+
+      // Broadcast reaction added via WebSocket
+      if (conversationId) {
+        broadcastToConversation(conversationId, {
+          type: 'reaction_added',
+          data: { messageId, userId, emoji, conversationId },
+        });
+      }
+
+      res.json(reaction);
+    } catch (error) {
+      console.error("Error adding reaction:", error);
+      res.status(500).json({ message: "Failed to add reaction" });
+    }
+  });
+
+  // Remove reaction from message
+  app.delete('/api/messages/:messageId/reactions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { messageId } = req.params;
+
+      await storage.removeReaction(messageId, userId);
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing reaction:", error);
+      res.status(500).json({ message: "Failed to remove reaction" });
     }
   });
 
