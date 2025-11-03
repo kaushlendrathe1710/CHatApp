@@ -54,6 +54,12 @@ export default function Home() {
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
 
+  // Fetch conversations
+  const { data: conversations = [], isLoading: conversationsLoading } = useQuery<ConversationWithDetails[]>({
+    queryKey: ['/api/conversations'],
+    enabled: !!user,
+  });
+
   // WebSocket connection with error handling
   const { sendMessage: sendWsMessage, isConnected: wsConnected } = useWebSocket((message) => {
     try {
@@ -94,13 +100,7 @@ export default function Home() {
     } catch (error) {
       console.error('Error handling WebSocket message:', error);
     }
-  }, conversations.map(c => c.id));
-
-  // Fetch conversations
-  const { data: conversations = [], isLoading: conversationsLoading } = useQuery<ConversationWithDetails[]>({
-    queryKey: ['/api/conversations'],
-    enabled: !!user,
-  });
+  }, conversations?.map(c => c.id) || []);
 
   // Fetch messages for selected conversation
   const { data: messages = [], isLoading: messagesLoading } = useQuery<MessageWithSender[]>({
