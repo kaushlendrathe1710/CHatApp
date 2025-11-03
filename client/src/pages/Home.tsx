@@ -25,7 +25,7 @@ import { TypingIndicator } from "@/components/TypingIndicator";
 import { OnlineStatus } from "@/components/OnlineStatus";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ObjectUploader } from "@/components/ObjectUploader";
-import { getUserDisplayName, formatLastSeen } from "@/lib/formatters";
+import { getUserDisplayName, formatLastSeen, formatDateSeparator } from "@/lib/formatters";
 import type { ConversationWithDetails, MessageWithSender, User } from "@shared/schema";
 import {
   LogOut,
@@ -461,14 +461,25 @@ export default function Home() {
                     const prevMessage = messages[index - 1];
                     const showAvatar = !prevMessage || prevMessage.senderId !== message.senderId;
                     
+                    const showDateSeparator = !prevMessage || 
+                      new Date(message.createdAt!).toDateString() !== new Date(prevMessage.createdAt!).toDateString();
+                    
                     return (
-                      <ChatMessage
-                        key={message.id}
-                        message={message}
-                        isOwn={message.senderId === user?.id}
-                        showAvatar={showAvatar}
-                        isGroup={selectedConversation.isGroup}
-                      />
+                      <div key={message.id}>
+                        {showDateSeparator && (
+                          <div className="flex items-center justify-center my-4" data-testid={`date-separator-${message.id}`}>
+                            <div className="px-3 py-1 rounded-full bg-muted text-xs text-muted-foreground">
+                              {formatDateSeparator(message.createdAt!)}
+                            </div>
+                          </div>
+                        )}
+                        <ChatMessage
+                          message={message}
+                          isOwn={message.senderId === user?.id}
+                          showAvatar={showAvatar}
+                          isGroup={selectedConversation.isGroup}
+                        />
+                      </div>
                     );
                   })}
                   <div ref={messagesEndRef} />
