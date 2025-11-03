@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { OnlineStatus } from "@/components/OnlineStatus";
 import { formatChatListTime, getUserDisplayName } from "@/lib/formatters";
 import type { ConversationWithDetails } from "@shared/schema";
-import { Users } from "lucide-react";
+import { Users, Image as ImageIcon, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ConversationListItemProps {
@@ -52,17 +52,17 @@ export function ConversationListItem({
 
   const getLastMessagePreview = () => {
     if (!conversation.lastMessage) {
-      return 'No messages yet';
+      return { type: 'text', content: 'No messages yet' };
     }
     
     const msg = conversation.lastMessage;
     if (msg.type === 'image') {
-      return '📷 Photo';
+      return { type: 'image', content: 'Photo' };
     }
     if (msg.type === 'file') {
-      return '📎 ' + (msg.fileName || 'File');
+      return { type: 'file', content: msg.fileName || 'File' };
     }
-    return msg.content || '';
+    return { type: 'text', content: msg.content || '' };
   };
 
   return (
@@ -107,9 +107,28 @@ export function ConversationListItem({
         </div>
         
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground truncate" data-testid="text-last-message">
-            {getLastMessagePreview()}
-          </p>
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground truncate min-w-0" data-testid="text-last-message">
+            {(() => {
+              const preview = getLastMessagePreview();
+              if (preview.type === 'image') {
+                return (
+                  <>
+                    <ImageIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="truncate">{preview.content}</span>
+                  </>
+                );
+              }
+              if (preview.type === 'file') {
+                return (
+                  <>
+                    <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="truncate">{preview.content}</span>
+                  </>
+                );
+              }
+              return <span className="truncate">{preview.content}</span>;
+            })()}
+          </div>
           
           {conversation.unreadCount !== undefined && conversation.unreadCount > 0 && (
             <Badge 
