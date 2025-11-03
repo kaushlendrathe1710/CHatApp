@@ -2,7 +2,26 @@
 
 ## Overview
 
-A modern real-time messaging platform inspired by WhatsApp and Telegram, built with React, Express, and WebSockets. The application supports one-on-one and group conversations with real-time message delivery, typing indicators, media sharing, and online presence tracking.
+A modern real-time messaging platform inspired by WhatsApp and Telegram, built with React, Express, and WebSockets. The application supports one-on-one and group conversations with real-time message delivery, typing indicators, emoji picker, message status indicators (read receipts), date separators, online presence UI, and media sharing infrastructure.
+
+## Recent Changes (November 2025)
+
+**Completed MVP Features:**
+- ✅ Group chat creation with name and participant management
+- ✅ Message timestamps with date separators ("Today", "Yesterday", formatted dates)
+- ✅ Read receipts with Check/CheckCheck icons and real-time status updates
+- ✅ Emoji picker integration using emoji-picker-react library
+- ✅ Typing indicators with animated dots and user name display
+- ✅ Online status dots on avatars in conversation list and chat header
+- ✅ Last seen timestamps for offline users
+- ✅ Search functionality filtering conversations by name
+- ✅ Mobile-responsive design with menu toggle
+- ✅ File/image message preview icons (replaced emoji with lucide-react icons)
+
+**Known Limitations:**
+- Backend presence broadcasting not yet implemented (online dots need real-time updates)
+- Group chat WebSocket notifications to new participants need debugging
+- File upload flow partially implemented (ObjectUploader exists, full integration pending)
 
 ## User Preferences
 
