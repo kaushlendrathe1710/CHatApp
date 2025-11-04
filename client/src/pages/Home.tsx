@@ -25,6 +25,8 @@ import { TypingIndicator } from "@/components/TypingIndicator";
 import { OnlineStatus } from "@/components/OnlineStatus";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ObjectUploader } from "@/components/ObjectUploader";
+import { ForwardMessageDialog } from "@/components/ForwardMessageDialog";
+import { DisappearingMessagesSettings } from "@/components/DisappearingMessagesSettings";
 import { getUserDisplayName, formatLastSeen, formatDateSeparator } from "@/lib/formatters";
 import type { ConversationWithDetails, MessageWithSender, User } from "@shared/schema";
 import {
@@ -53,6 +55,8 @@ export default function Home() {
   const [replyToMessage, setReplyToMessage] = useState<MessageWithSender | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
+  const [messageToForward, setMessageToForward] = useState<MessageWithSender | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
@@ -273,6 +277,35 @@ export default function Home() {
     setEditContent('');
   };
 
+  const handleForward = (message: MessageWithSender) => {
+    setMessageToForward(message);
+    setForwardDialogOpen(true);
+  };
+
+  const handleUpdateDisappearingTimer = async (timerMs: number) => {
+    if (!selectedConversationId) return;
+    
+    try {
+      await apiRequest('PATCH', `/api/conversations/${selectedConversationId}/settings`, {
+        disappearingMessagesTimer: timerMs,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+      toast({
+        title: "Settings updated",
+        description: timerMs === 0 
+          ? "Disappearing messages turned off" 
+          : `Messages will disappear after ${timerMs === 86400000 ? '24 hours' : timerMs === 604800000 ? '7 days' : '90 days'}`,
+      });
+    } catch (error) {
+      console.error('Failed to update disappearing messages timer:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update settings",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleAddReaction = async (messageId: string, emoji: string) => {
     if (!selectedConversationId) return;
     
@@ -331,6 +364,7 @@ export default function Home() {
   }
 
   return (
+    <>
     <div className="h-screen flex overflow-hidden bg-background">
       {/* Sidebar - Chat List */}
       <div className={`
@@ -508,6 +542,10 @@ export default function Home() {
               </div>
 
               <div className="flex items-center gap-1">
+                <DisappearingMessagesSettings
+                  conversation={selectedConversation}
+                  onUpdateTimer={handleUpdateDisappearingTimer}
+                />
                 <Button variant="ghost" size="icon" data-testid="button-voice-call">
                   <Phone className="h-5 w-5" />
                 </Button>
@@ -570,6 +608,7 @@ export default function Home() {
                           onRemoveReaction={handleRemoveReaction}
                           onReply={handleReply}
                           onEdit={handleEdit}
+                          onForward={handleForward}
                           isEditing={editingMessageId === message.id}
                           editContent={editContent}
                           onEditContentChange={setEditContent}
@@ -610,6 +649,20 @@ export default function Home() {
         )}
       </div>
     </div>
+
+    {/* New Conversation Dialog */}
+    <NewConversationDialog users={allUsers} onCreateConversation={createConversationMutation.mutate} />
+
+    {/* Forward Message Dialog */}
+    <ForwardMessageDialog
+      open={forwardDialogOpen}
+      onOpenChange={setForwardDialogOpen}
+      messageId={messageToForward?.id || ''}
+      conversations={conversations}
+      currentConversationId={selectedConversationId || ''}
+      currentUserId={user?.id || ''}
+    />
+    </>
   );
 }
 

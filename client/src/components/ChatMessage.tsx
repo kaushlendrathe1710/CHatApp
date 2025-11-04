@@ -1,7 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import type { MessageWithSender } from "@shared/schema";
-import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageReactions } from "@/components/MessageReactions";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +23,7 @@ interface ChatMessageProps {
   onRemoveReaction?: (messageId: string) => void;
   onReply?: (message: MessageWithSender) => void;
   onEdit?: (message: MessageWithSender) => void;
+  onForward?: (message: MessageWithSender) => void;
   isEditing?: boolean;
   editContent?: string;
   onEditContentChange?: (content: string) => void;
@@ -41,6 +42,7 @@ export function ChatMessage({
   onRemoveReaction,
   onReply,
   onEdit,
+  onForward,
   isEditing = false,
   editContent = '',
   onEditContentChange,
@@ -49,6 +51,18 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const senderName = getUserDisplayName(message.sender);
   const initials = senderName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+  const renderForwardedFromBadge = () => {
+    if (!message.forwardedFromUser) return null;
+    
+    const forwardedName = getUserDisplayName(message.forwardedFromUser);
+    return (
+      <div className="text-xs text-muted-foreground italic mb-1" data-testid={`text-forwarded-from-${message.id}`}>
+        <Forward className="h-3 w-3 inline mr-1" />
+        Forwarded from {forwardedName}
+      </div>
+    );
+  };
 
   const renderMessageContent = () => {
     // If editing, show textarea
@@ -184,6 +198,7 @@ export function ChatMessage({
               : 'bg-card border border-card-border rounded-bl-sm'
           }`}
         >
+          {renderForwardedFromBadge()}
           {renderMessageContent()}
           
           <div className={`flex items-center gap-1 mt-1 justify-end ${
@@ -202,7 +217,7 @@ export function ChatMessage({
         </div>
         
         {/* Message Actions Menu (visible on hover) */}
-        {!isEditing && (onReply || (onEdit && isOwn)) && (
+        {!isEditing && (onReply || onForward || (onEdit && isOwn)) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -219,6 +234,12 @@ export function ChatMessage({
                 <DropdownMenuItem onClick={() => onReply(message)} data-testid={`menu-reply-${message.id}`}>
                   <Reply className="h-4 w-4 mr-2" />
                   Reply
+                </DropdownMenuItem>
+              )}
+              {onForward && (
+                <DropdownMenuItem onClick={() => onForward(message)} data-testid={`menu-forward-${message.id}`}>
+                  <Forward className="h-4 w-4 mr-2" />
+                  Forward
                 </DropdownMenuItem>
               )}
               {onEdit && isOwn && message.type === 'text' && (
