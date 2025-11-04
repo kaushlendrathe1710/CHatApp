@@ -110,12 +110,34 @@ export default function Home() {
         // Invalidate messages to show new reactions or edits
         queryClient.invalidateQueries({ queryKey: ['/api/messages', message.data.conversationId] });
       } else if (message.type === 'message_deleted') {
-        // Remove deleted message from the UI
-        queryClient.invalidateQueries({ queryKey: ['/api/messages', message.data.conversationId] });
+        // Immediately remove deleted message from the cache
+        const { messageId, conversationId } = message.data;
+        
+        // Update messages cache to remove the deleted message (only if cache exists)
+        queryClient.setQueryData<MessageWithSender[]>(
+          ['/api/messages', conversationId],
+          (oldMessages) => {
+            // Only update if cache already exists, otherwise let query fetch normally
+            if (!oldMessages) return undefined;
+            return oldMessages.filter(msg => msg.id !== messageId);
+          }
+        );
+        
+        // Invalidate conversations to update last message preview
         queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
       } else if (message.type === 'settings_updated') {
-        // Update conversation settings (e.g., disappearing messages timer)
-        queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+        // Immediately update conversation settings in cache
+        const { conversationId, disappearingMessagesTimer } = message.data;
+        
+        queryClient.setQueryData<ConversationWithDetails[]>(
+          ['/api/conversations'],
+          (oldConversations) => 
+            oldConversations?.map(conv => 
+              conv.id === conversationId 
+                ? { ...conv, disappearingMessagesTimer }
+                : conv
+            ) || []
+        );
       }
     } catch (error) {
       console.error('Error handling WebSocket message:', error);
