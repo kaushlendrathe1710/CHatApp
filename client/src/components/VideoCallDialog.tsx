@@ -67,6 +67,23 @@ export function VideoCallDialog({
     }
   }, [remoteStream]);
 
+  // Handle all incoming signals (ICE candidates, answers, offers, renegotiation)
+  // React's dependency array ensures this only runs when incomingSignal actually changes
+  useEffect(() => {
+    if (peer && incomingSignal) {
+      try {
+        peer.signal(incomingSignal);
+      } catch (error) {
+        console.error("Error signaling peer:", error);
+        toast({
+          title: "Signaling Error",
+          description: "Failed to process connection data",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [peer, incomingSignal, toast]);
+
   const initializeCall = async () => {
     try {
       const constraints = {

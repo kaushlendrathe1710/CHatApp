@@ -144,6 +144,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "conversationId is required" });
       }
 
+      // Check if this is a broadcast channel and verify permissions
+      const conversation = await storage.getConversation(conversationId);
+      if (conversation?.isBroadcast) {
+        const canSend = await storage.canSendToBroadcast(conversationId, userId);
+        if (!canSend) {
+          return res.status(403).json({ message: "Only admins can post to broadcast channels" });
+        }
+      }
+
       const message = await storage.createMessage({
         conversationId,
         senderId: userId,
