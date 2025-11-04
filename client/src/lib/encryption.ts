@@ -36,7 +36,7 @@ export async function generateKeyPair(): Promise<EncryptionKeyPair> {
  */
 export async function exportPublicKey(publicKey: CryptoKey): Promise<string> {
   const exported = await crypto.subtle.exportKey('spki', publicKey);
-  const exportedAsBase64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
+  const exportedAsBase64 = btoa(String.fromCharCode(...Array.from(new Uint8Array(exported))));
   return exportedAsBase64;
 }
 
@@ -69,7 +69,7 @@ export async function importPublicKey(base64Key: string): Promise<CryptoKey> {
  */
 export async function exportPrivateKey(privateKey: CryptoKey): Promise<string> {
   const exported = await crypto.subtle.exportKey('pkcs8', privateKey);
-  const exportedAsBase64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
+  const exportedAsBase64 = btoa(String.fromCharCode(...Array.from(new Uint8Array(exported))));
   return exportedAsBase64;
 }
 
@@ -216,7 +216,7 @@ export async function encryptMessage(
   combined.set(encryptedMessageArray, 2 + encryptedSymKeyArray.length + iv.length);
 
   // Convert to base64
-  const combinedAsBase64 = btoa(String.fromCharCode(...combined));
+  const combinedAsBase64 = btoa(String.fromCharCode(...Array.from(combined)));
   return combinedAsBase64;
 }
 
