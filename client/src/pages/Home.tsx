@@ -322,22 +322,32 @@ export default function Home() {
     let finalContent = content;
     let isEncrypted = false;
 
-    // Encrypt message if encryption is enabled
-    if (isEncryptionEnabled && selectedConversation && !selectedConversation.isGroup) {
-      try {
-        // Get the other user's public key
-        const otherUser = selectedConversation.participants.find(p => p.userId !== user?.id);
-        if (otherUser && peerPublicKeys[otherUser.userId]) {
-          finalContent = await encryptMessage(content, peerPublicKeys[otherUser.userId]);
-          isEncrypted = true;
-        }
-      } catch (error) {
-        console.error('Failed to encrypt message:', error);
+    // Encrypt message if encryption is enabled (only for direct conversations)
+    if (isEncryptionEnabled && selectedConversation) {
+      // Prevent encryption in group chats and broadcast channels
+      if (selectedConversation.isGroup || selectedConversation.isBroadcast) {
         toast({
-          title: "Encryption Error",
-          description: "Failed to encrypt message. Sending as plain text.",
+          title: "Encryption Not Supported",
+          description: "End-to-end encryption is only available for direct conversations.",
           variant: "destructive",
         });
+        // Send as plain text
+      } else {
+        try {
+          // Get the other user's public key
+          const otherUser = selectedConversation.participants.find(p => p.userId !== user?.id);
+          if (otherUser && peerPublicKeys[otherUser.userId]) {
+            finalContent = await encryptMessage(content, peerPublicKeys[otherUser.userId]);
+            isEncrypted = true;
+          }
+        } catch (error) {
+          console.error('Failed to encrypt message:', error);
+          toast({
+            title: "Encryption Error",
+            description: "Failed to encrypt message. Sending as plain text.",
+            variant: "destructive",
+          });
+        }
       }
     }
 
@@ -695,15 +705,17 @@ export default function Home() {
                 >
                   <Video className="h-5 w-5" />
                 </Button>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={() => setEncryptionDialogOpen(true)}
-                  data-testid="button-encryption"
-                  title="Enable Encryption"
-                >
-                  <Shield className="h-5 w-5" />
-                </Button>
+                {!selectedConversation.isGroup && !selectedConversation.isBroadcast && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => setEncryptionDialogOpen(true)}
+                    data-testid="button-encryption"
+                    title="Enable End-to-End Encryption"
+                  >
+                    <Shield className={`h-5 w-5 ${isEncryptionEnabled ? 'text-primary' : ''}`} />
+                  </Button>
+                )}
                 <Button variant="ghost" size="icon" data-testid="button-conversation-menu">
                   <MoreVertical className="h-5 w-5" />
                 </Button>
