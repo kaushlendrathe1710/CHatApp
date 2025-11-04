@@ -4,6 +4,7 @@ import {
   conversationParticipants,
   messages,
   messageReactions,
+  encryptionKeys,
   type User,
   type UpsertUser,
   type Conversation,
@@ -14,6 +15,8 @@ import {
   type InsertMessage,
   type MessageReaction,
   type InsertMessageReaction,
+  type EncryptionKey,
+  type InsertEncryptionKey,
   type ConversationWithDetails,
   type MessageWithSender,
 } from "@shared/schema";
@@ -51,6 +54,17 @@ export interface IStorage {
   // Disappearing messages operations
   updateDisappearingMessagesTimer(conversationId: string, timerMs: number): Promise<Conversation>;
   deleteExpiredMessages(): Promise<Array<{ messageId: string; conversationId: string }>>;
+  
+  // Encryption operations
+  storeEncryptionKey(key: InsertEncryptionKey): Promise<EncryptionKey>;
+  getEncryptionKeys(conversationId: string): Promise<EncryptionKey[]>;
+  getUserEncryptionKey(conversationId: string, userId: string): Promise<EncryptionKey | undefined>;
+  
+  // Broadcast channel operations
+  createBroadcastChannel(name: string, description: string, createdBy: string): Promise<Conversation>;
+  subscribeToBroadcast(conversationId: string, userId: string): Promise<void>;
+  unsubscribeFromBroadcast(conversationId: string, userId: string): Promise<void>;
+  canSendToBroadcast(conversationId: string, userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -446,6 +460,94 @@ export class DatabaseStorage implements IStorage {
       .returning({ id: messages.id, conversationId: messages.conversationId });
     
     return result.map(r => ({ messageId: r.id, conversationId: r.conversationId }));
+  }
+
+  // Encryption operations
+  async storeEncryptionKey(key: InsertEncryptionKey): Promise<EncryptionKey> {
+    const [stored] = await db
+      .insert(encryptionKeys)
+      .values(key)
+      .onConflictDoUpdate({
+        target: [encryptionKeys.conversationId, encryptionKeys.userId],
+        set: { publicKey: key.publicKey },
+      })
+      .returning();
+    return stored;
+  }
+
+  async getEncryptionKeys(conversationId: string): Promise<EncryptionKey[]> {
+    return await db
+      .select()
+      .from(encryptionKeys)
+      .where(eq(encryptionKeys.conversationId, conversationId));
+  }
+
+  async getUserEncryptionKey(conversationId: string, userId: string): Promise<EncryptionKey | undefined> {
+    const [key] = await db
+      .select()
+      .from(encryptionKeys)
+      .where(
+        and(
+          eq(encryptionKeys.conversationId, conversationId),
+          eq(encryptionKeys.userId, userId)
+        )
+      );
+    return key;
+  }
+
+  // Broadcast channel operations
+  async createBroadcastChannel(name: string, description: string, createdBy: string): Promise<Conversation> {
+    const [channel] = await db
+      .insert(conversations)
+      .values({
+        name,
+        description,
+        isBroadcast: true,
+        isGroup: false,
+        createdBy,
+      })
+      .returning();
+
+    await db.insert(conversationParticipants).values({
+      conversationId: channel.id,
+      userId: createdBy,
+      role: 'admin',
+    });
+
+    return channel;
+  }
+
+  async subscribeToBroadcast(conversationId: string, userId: string): Promise<void> {
+    await db.insert(conversationParticipants).values({
+      conversationId,
+      userId,
+      role: 'subscriber',
+    });
+  }
+
+  async unsubscribeFromBroadcast(conversationId: string, userId: string): Promise<void> {
+    await db
+      .delete(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conversationId),
+          eq(conversationParticipants.userId, userId)
+        )
+      );
+  }
+
+  async canSendToBroadcast(conversationId: string, userId: string): Promise<boolean> {
+    const [participant] = await db
+      .select()
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conversationId),
+          eq(conversationParticipants.userId, userId)
+        )
+      );
+
+    return participant?.role === 'admin';
   }
 }
 

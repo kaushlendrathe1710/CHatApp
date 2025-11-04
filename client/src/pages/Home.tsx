@@ -27,6 +27,9 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { ForwardMessageDialog } from "@/components/ForwardMessageDialog";
 import { DisappearingMessagesSettings } from "@/components/DisappearingMessagesSettings";
+import { CreateBroadcastDialog } from "@/components/CreateBroadcastDialog";
+import { EncryptionSetupDialog } from "@/components/EncryptionSetupDialog";
+import { VideoCallDialog } from "@/components/VideoCallDialog";
 import { getUserDisplayName, formatLastSeen, formatDateSeparator } from "@/lib/formatters";
 import type { ConversationWithDetails, MessageWithSender, User } from "@shared/schema";
 import {
@@ -41,6 +44,8 @@ import {
   Users,
   MessageCircle,
   Image as ImageIcon,
+  Radio,
+  Shield,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -57,6 +62,13 @@ export default function Home() {
   const [editContent, setEditContent] = useState("");
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [messageToForward, setMessageToForward] = useState<MessageWithSender | null>(null);
+  const [broadcastDialogOpen, setBroadcastDialogOpen] = useState(false);
+  const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
+  const [callDialogOpen, setCallDialogOpen] = useState(false);
+  const [callType, setCallType] = useState<"audio" | "video">("audio");
+  const [isCallInitiator, setIsCallInitiator] = useState(false);
+  const [incomingCallSignal, setIncomingCallSignal] = useState<any>(null);
+  const [isEncryptionEnabled, setIsEncryptionEnabled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
@@ -138,6 +150,25 @@ export default function Home() {
                 : conv
             ) || []
         );
+      } else if (message.type === 'call_initiate') {
+        // Incoming call
+        const { conversationId, callType: incomingCallType } = message.data;
+        if (conversationId === selectedConversationId) {
+          setCallType(incomingCallType);
+          setIsCallInitiator(false);
+          setCallDialogOpen(true);
+        }
+      } else if (message.type === 'call_signal') {
+        // WebRTC signaling
+        setIncomingCallSignal(message.data.signal);
+      } else if (message.type === 'call_end') {
+        // Call ended by other party
+        setCallDialogOpen(false);
+      } else if (message.type === 'encryption_key_added') {
+        // Encryption key added to conversation
+        if (message.data.conversationId === selectedConversationId) {
+          setIsEncryptionEnabled(true);
+        }
       }
     } catch (error) {
       console.error('Error handling WebSocket message:', error);
@@ -420,6 +451,15 @@ export default function Home() {
           </div>
           
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setBroadcastDialogOpen(true)}
+              data-testid="button-create-broadcast"
+              title="Create Broadcast Channel"
+            >
+              <Radio className="h-5 w-5" />
+            </Button>
             <NewConversationDialog users={allUsers} onCreateConversation={createConversationMutation.mutate} />
             <ThemeToggle />
             <Button
@@ -575,11 +615,46 @@ export default function Home() {
                   conversation={selectedConversation}
                   onUpdateTimer={handleUpdateDisappearingTimer}
                 />
-                <Button variant="ghost" size="icon" data-testid="button-voice-call">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => {
+                    setCallType("audio");
+                    setIsCallInitiator(true);
+                    setCallDialogOpen(true);
+                    sendWsMessage({
+                      type: "call_initiate",
+                      data: { conversationId: selectedConversationId, callType: "audio" }
+                    } as any);
+                  }}
+                  data-testid="button-voice-call"
+                >
                   <Phone className="h-5 w-5" />
                 </Button>
-                <Button variant="ghost" size="icon" data-testid="button-video-call">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => {
+                    setCallType("video");
+                    setIsCallInitiator(true);
+                    setCallDialogOpen(true);
+                    sendWsMessage({
+                      type: "call_initiate",
+                      data: { conversationId: selectedConversationId, callType: "video" }
+                    } as any);
+                  }}
+                  data-testid="button-video-call"
+                >
                   <Video className="h-5 w-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setEncryptionDialogOpen(true)}
+                  data-testid="button-encryption"
+                  title="Enable Encryption"
+                >
+                  <Shield className="h-5 w-5" />
                 </Button>
                 <Button variant="ghost" size="icon" data-testid="button-conversation-menu">
                   <MoreVertical className="h-5 w-5" />
@@ -691,6 +766,37 @@ export default function Home() {
       currentConversationId={selectedConversationId || ''}
       currentUserId={user?.id || ''}
     />
+
+    <CreateBroadcastDialog
+      open={broadcastDialogOpen}
+      onOpenChange={setBroadcastDialogOpen}
+    />
+
+    <EncryptionSetupDialog
+      open={encryptionDialogOpen}
+      onOpenChange={setEncryptionDialogOpen}
+      conversationId={selectedConversationId || ''}
+      onEncryptionEnabled={() => setIsEncryptionEnabled(true)}
+    />
+
+    {selectedConversationId && (
+      <VideoCallDialog
+        open={callDialogOpen}
+        onOpenChange={setCallDialogOpen}
+        conversationId={selectedConversationId}
+        isInitiator={isCallInitiator}
+        callType={callType}
+        onSignal={(signal) => {
+          sendWsMessage({
+            type: "call_signal",
+            data: { conversationId: selectedConversationId, signal }
+          } as any);
+        }}
+        incomingSignal={incomingCallSignal}
+        callerName={selectedConversation?.isGroup ? selectedConversation.name || 'Group' : getUserDisplayName(selectedConversation?.participants.find(p => p.userId !== user?.id)?.user || {})}
+        ws={null}
+      />
+    )}
     </>
   );
 }

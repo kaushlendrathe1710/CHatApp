@@ -71,7 +71,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "userIds is required" });
       }
 
-      let conversation;
+      let conversation: any;
 
       if (!isGroup && userIds.length === 1) {
         // Direct conversation - check if it already exists
@@ -293,6 +293,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Broadcast Channels
+
+  // Create broadcast channel
+  app.post('/api/broadcast/create', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { name, description } = req.body;
+
+      if (!name) {
+        return res.status(400).json({ message: "name is required" });
+      }
+
+      const channel = await storage.createBroadcastChannel(name, description || '', userId);
+      res.json(channel);
+    } catch (error) {
+      console.error("Error creating broadcast channel:", error);
+      res.status(500).json({ message: "Failed to create broadcast channel" });
+    }
+  });
+
+  // Subscribe to broadcast channel
+  app.post('/api/broadcast/:channelId/subscribe', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { channelId } = req.params;
+
+      await storage.subscribeToBroadcast(channelId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error subscribing to broadcast:", error);
+      res.status(500).json({ message: "Failed to subscribe to broadcast channel" });
+    }
+  });
+
+  // Unsubscribe from broadcast channel
+  app.post('/api/broadcast/:channelId/unsubscribe', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { channelId } = req.params;
+
+      await storage.unsubscribeFromBroadcast(channelId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unsubscribing from broadcast:", error);
+      res.status(500).json({ message: "Failed to unsubscribe from broadcast channel" });
+    }
+  });
+
+  // Encryption
+
+  // Store encryption public key
+  app.post('/api/encryption/keys', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { conversationId, publicKey } = req.body;
+
+      if (!conversationId || !publicKey) {
+        return res.status(400).json({ message: "conversationId and publicKey are required" });
+      }
+
+      const key = await storage.storeEncryptionKey({ conversationId, userId, publicKey });
+      
+      // Broadcast new key to conversation participants
+      broadcastToConversation(conversationId, {
+        type: 'encryption_key_added',
+        data: { conversationId, userId, publicKey },
+      });
+
+      res.json(key);
+    } catch (error) {
+      console.error("Error storing encryption key:", error);
+      res.status(500).json({ message: "Failed to store encryption key" });
+    }
+  });
+
+  // Get encryption keys for conversation
+  app.get('/api/encryption/keys/:conversationId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { conversationId } = req.params;
+      const keys = await storage.getEncryptionKeys(conversationId);
+      res.json(keys);
+    } catch (error) {
+      console.error("Error getting encryption keys:", error);
+      res.status(500).json({ message: "Failed to get encryption keys" });
+    }
+  });
+
   // Object storage routes
   app.get("/objects/:objectPath(*)", isAuthenticated, async (req: any, res) => {
     const userId = req.user?.claims?.sub;
@@ -373,6 +460,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             wsClients.get(convId)!.add(ws);
           });
+        } else if (message.type === 'call_signal') {
+          // Forward WebRTC signaling data (offer, answer, ice candidate)
+          broadcastToConversation(message.data.conversationId, message);
+        } else if (message.type === 'call_initiate') {
+          // Notify other participant(s) of incoming call
+          broadcastToConversation(message.data.conversationId, message);
+        } else if (message.type === 'call_end') {
+          // Notify participants that call ended
+          broadcastToConversation(message.data.conversationId, message);
         }
       } catch (error) {
         console.error('Error handling WebSocket message:', error);

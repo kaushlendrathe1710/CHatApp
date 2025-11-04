@@ -40,11 +40,13 @@ export const users = pgTable("users", {
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
-// Conversations table (supports both 1-on-1 and group chats)
+// Conversations table (supports both 1-on-1, group chats, and broadcast channels)
 export const conversations = pgTable("conversations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name"),
   isGroup: boolean("is_group").default(false).notNull(),
+  isBroadcast: boolean("is_broadcast").default(false).notNull(),
+  description: text("description"),
   avatarUrl: varchar("avatar_url"),
   createdBy: varchar("created_by").references(() => users.id),
   disappearingMessagesTimer: integer("disappearing_messages_timer").default(0).notNull(),
@@ -66,6 +68,7 @@ export const conversationParticipants = pgTable("conversation_participants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: 'cascade' }).notNull(),
   userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  role: text("role").default("member").notNull(), // admin, member, subscriber (for broadcast channels)
   joinedAt: timestamp("joined_at").defaultNow(),
   lastReadAt: timestamp("last_read_at"),
 }, (table) => [
@@ -87,15 +90,18 @@ export const messages = pgTable("messages", {
   conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: 'cascade' }).notNull(),
   senderId: varchar("sender_id").references(() => users.id).notNull(),
   content: text("content"),
-  type: text("type").default("text").notNull(), // text, image, file
+  type: text("type").default("text").notNull(), // text, image, file, call
   fileUrl: varchar("file_url"),
   fileName: varchar("file_name"),
   fileSize: integer("file_size"),
   status: text("status").default("sent").notNull(), // sent, delivered, read
   replyToId: varchar("reply_to_id").references((): any => messages.id),
   isEdited: boolean("is_edited").default(false),
+  isEncrypted: boolean("is_encrypted").default(false),
   forwardedFrom: varchar("forwarded_from").references(() => users.id),
   expiresAt: timestamp("expires_at"),
+  callDuration: integer("call_duration"), // in seconds, for call messages
+  callType: text("call_type"), // audio, video
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at"),
 }, (table) => [
@@ -129,6 +135,18 @@ export const messageReactions = pgTable("message_reactions", {
   index("idx_reactions_user").on(table.userId),
 ]);
 
+// Encryption keys table for E2EE
+export const encryptionKeys = pgTable("encryption_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: 'cascade' }).notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  publicKey: text("public_key").notNull(), // Base64 encoded public key
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_encryption_keys_conversation").on(table.conversationId),
+  index("idx_encryption_keys_user").on(table.userId),
+]);
+
 export const insertMessageReactionSchema = createInsertSchema(messageReactions).omit({
   id: true,
   createdAt: true,
@@ -136,6 +154,14 @@ export const insertMessageReactionSchema = createInsertSchema(messageReactions).
 
 export type InsertMessageReaction = z.infer<typeof insertMessageReactionSchema>;
 export type MessageReaction = typeof messageReactions.$inferSelect;
+
+export const insertEncryptionKeySchema = createInsertSchema(encryptionKeys).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertEncryptionKey = z.infer<typeof insertEncryptionKeySchema>;
+export type EncryptionKey = typeof encryptionKeys.$inferSelect;
 
 // Typing indicators (ephemeral, tracked via WebSocket)
 export type TypingIndicator = {
