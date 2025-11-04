@@ -462,7 +462,7 @@ export default function Home() {
   const filteredConversations = conversations.filter(conv => {
     if (!searchQuery) return true;
     const otherParticipants = conv.participants.filter(p => p.userId !== user?.id);
-    const name = conv.isGroup && conv.name 
+    const name = (conv.isGroup || conv.isBroadcast) && conv.name 
       ? conv.name 
       : otherParticipants.length > 0 
         ? getUserDisplayName(otherParticipants[0].user)
@@ -646,13 +646,13 @@ export default function Home() {
 
                 <div className="flex-1 min-w-0">
                   <h2 className="font-semibold truncate" data-testid="text-conversation-header-name">
-                    {selectedConversation.isGroup && selectedConversation.name
+                    {(selectedConversation.isGroup || selectedConversation.isBroadcast) && selectedConversation.name
                       ? selectedConversation.name
                       : selectedConversation.participants.find(p => p.userId !== user?.id)
                         ? getUserDisplayName(selectedConversation.participants.find(p => p.userId !== user?.id)!.user)
                         : 'Unknown'}
                   </h2>
-                  {selectedConversation.isGroup ? (
+                  {selectedConversation.isGroup || selectedConversation.isBroadcast ? (
                     <p className="text-xs text-muted-foreground">
                       {selectedConversation.participants.length} members
                     </p>

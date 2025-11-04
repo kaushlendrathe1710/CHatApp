@@ -26,7 +26,7 @@ export function ConversationListItem({
   );
 
   const getConversationName = () => {
-    if (conversation.isGroup && conversation.name) {
+    if ((conversation.isGroup || conversation.isBroadcast) && conversation.name) {
       return conversation.name;
     }
     if (otherParticipants.length > 0) {

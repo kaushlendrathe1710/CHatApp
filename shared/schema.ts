@@ -9,6 +9,7 @@ import {
   text,
   boolean,
   integer,
+  unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -145,6 +146,7 @@ export const encryptionKeys = pgTable("encryption_keys", {
 }, (table) => [
   index("idx_encryption_keys_conversation").on(table.conversationId),
   index("idx_encryption_keys_user").on(table.userId),
+  unique("unique_conversation_user_key").on(table.conversationId, table.userId),
 ]);
 
 export const insertMessageReactionSchema = createInsertSchema(messageReactions).omit({
