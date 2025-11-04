@@ -28,19 +28,21 @@ A modern real-time messaging platform inspired by WhatsApp and Telegram, built w
   - Preserves original message content, type, and file metadata
   - Real-time WebSocket broadcasting to all target conversations
 
-- **Disappearing Messages:**
+- **Disappearing Messages (FULLY COMPLETE):**
   - PATCH /api/conversations/:id/settings endpoint for timer configuration
-  - DisappearingMessagesSettings component in chat header
+  - DisappearingMessagesSettings component in chat header with aria-labels
   - Timer options: Off, 24 hours, 7 days, 90 days
   - Timer icon with enabled/disabled visual states
-  - Backend cleanup method ready for cron job implementation
-  - Success toasts on timer changes with accessible aria-labels
+  - **Visual countdown indicators** - Shows "Expires in X hours/days" on messages with Clock icon
+  - **Background cleanup job** - Runs every 5 minutes to delete expired messages
+  - **Real-time deletion** - WebSocket broadcasts message_deleted events
+  - **Immediate cache updates** - Deleted messages removed from UI instantly
+  - Proper cache handling - Only updates existing caches, prevents empty state flashes
 
 **Known Limitations:**
 - Backend presence broadcasting not yet implemented (online dots need real-time updates)
 - Group chat WebSocket notifications to new participants need debugging
 - File upload flow partially implemented (ObjectUploader exists, full integration pending)
-- Disappearing messages cleanup job requires cron scheduler integration
 
 ## User Preferences
 
