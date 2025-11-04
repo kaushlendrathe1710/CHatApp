@@ -1,7 +1,9 @@
+import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
+import { decryptMessage } from "@/lib/encryption";
 import type { MessageWithSender } from "@shared/schema";
-import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock, Shield, ShieldAlert } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { MessageReactions } from "@/components/MessageReactions";
@@ -50,8 +52,32 @@ export function ChatMessage({
   onSaveEdit,
   onCancelEdit
 }: ChatMessageProps) {
+  const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [decryptionError, setDecryptionError] = useState(false);
   const senderName = getUserDisplayName(message.sender);
   const initials = senderName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+  // Decrypt message if encrypted
+  useEffect(() => {
+    const decrypt = async () => {
+      if (message.isEncrypted && message.content) {
+        try {
+          const decrypted = await decryptMessage(message.content);
+          setDecryptedContent(decrypted);
+          setDecryptionError(false);
+        } catch (error) {
+          console.error('Failed to decrypt message:', error);
+          setDecryptedContent(null);
+          setDecryptionError(true);
+        }
+      } else {
+        setDecryptedContent(null);
+        setDecryptionError(false);
+      }
+    };
+
+    decrypt();
+  }, [message.content, message.isEncrypted]);
 
   const getExpirationText = () => {
     if (!message.expiresAt) return null;
@@ -170,6 +196,40 @@ export function ChatMessage({
       );
     }
 
+    // Handle encrypted messages
+    if (message.isEncrypted) {
+      if (decryptionError) {
+        return (
+          <div className="flex items-center gap-2 text-destructive" data-testid={`text-decryption-error-${message.id}`}>
+            <ShieldAlert className="h-4 w-4" />
+            <span className="text-sm">Unable to decrypt message</span>
+          </div>
+        );
+      }
+      
+      if (!decryptedContent) {
+        return (
+          <div className="flex items-center gap-2 text-muted-foreground" data-testid={`text-decrypting-${message.id}`}>
+            <Shield className="h-4 w-4 animate-pulse" />
+            <span className="text-sm">Decrypting...</span>
+          </div>
+        );
+      }
+      
+      return (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Shield className="h-3 w-3" />
+            <span>Encrypted</span>
+          </div>
+          <p className="text-sm whitespace-pre-wrap break-words" data-testid={`text-message-${message.id}`}>
+            {decryptedContent}
+          </p>
+        </div>
+      );
+    }
+
+    // Plain text message
     return (
       <p className="text-sm whitespace-pre-wrap break-words" data-testid={`text-message-${message.id}`}>
         {message.content}

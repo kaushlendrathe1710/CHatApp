@@ -31,6 +31,7 @@ import { CreateBroadcastDialog } from "@/components/CreateBroadcastDialog";
 import { EncryptionSetupDialog } from "@/components/EncryptionSetupDialog";
 import { VideoCallDialog } from "@/components/VideoCallDialog";
 import { getUserDisplayName, formatLastSeen, formatDateSeparator } from "@/lib/formatters";
+import { encryptMessage, hasEncryptionKeys, getStoredPublicKeyBase64 } from "@/lib/encryption";
 import type { ConversationWithDetails, MessageWithSender, User } from "@shared/schema";
 import {
   LogOut,
@@ -69,6 +70,7 @@ export default function Home() {
   const [isCallInitiator, setIsCallInitiator] = useState(false);
   const [incomingCallSignal, setIncomingCallSignal] = useState<any>(null);
   const [isEncryptionEnabled, setIsEncryptionEnabled] = useState(false);
+  const [peerPublicKeys, setPeerPublicKeys] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
@@ -181,6 +183,12 @@ export default function Home() {
     enabled: !!selectedConversationId,
   });
 
+  // Fetch encryption keys for selected conversation
+  const { data: encryptionKeys = [] } = useQuery<Array<{ userId: string; publicKey: string }>>({
+    queryKey: ['/api/encryption/keys', selectedConversationId],
+    enabled: !!selectedConversationId,
+  });
+
   // Fetch all users for new conversation
   const { data: allUsers = [] } = useQuery<User[]>({
     queryKey: ['/api/users'],
@@ -189,15 +197,31 @@ export default function Home() {
 
   const selectedConversation = conversations.find(c => c.id === selectedConversationId);
 
+  // Update encryption state when conversation changes or keys are loaded
+  useEffect(() => {
+    if (selectedConversationId && encryptionKeys.length > 0) {
+      const keysMap: Record<string, string> = {};
+      encryptionKeys.forEach(k => {
+        keysMap[k.userId] = k.publicKey;
+      });
+      setPeerPublicKeys(keysMap);
+      setIsEncryptionEnabled(hasEncryptionKeys() && encryptionKeys.length > 0);
+    } else {
+      setPeerPublicKeys({});
+      setIsEncryptionEnabled(false);
+    }
+  }, [selectedConversationId, encryptionKeys]);
+
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ content, fileUrl, fileName, fileSize, type, replyToId }: {
+    mutationFn: async ({ content, fileUrl, fileName, fileSize, type, replyToId, isEncrypted }: {
       content?: string;
       fileUrl?: string;
       fileName?: string;
       fileSize?: number;
       type?: string;
       replyToId?: string;
+      isEncrypted?: boolean;
     }) => {
       return apiRequest('POST', '/api/messages', {
         conversationId: selectedConversationId,
@@ -207,6 +231,7 @@ export default function Home() {
         fileSize,
         type: type || 'text',
         replyToId,
+        isEncrypted: isEncrypted || false,
       });
     },
     onSuccess: () => {
@@ -293,10 +318,33 @@ export default function Home() {
     // This will be triggered by ObjectUploader
   };
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = async (content: string) => {
+    let finalContent = content;
+    let isEncrypted = false;
+
+    // Encrypt message if encryption is enabled
+    if (isEncryptionEnabled && selectedConversation && !selectedConversation.isGroup) {
+      try {
+        // Get the other user's public key
+        const otherUser = selectedConversation.participants.find(p => p.userId !== user?.id);
+        if (otherUser && peerPublicKeys[otherUser.userId]) {
+          finalContent = await encryptMessage(content, peerPublicKeys[otherUser.userId]);
+          isEncrypted = true;
+        }
+      } catch (error) {
+        console.error('Failed to encrypt message:', error);
+        toast({
+          title: "Encryption Error",
+          description: "Failed to encrypt message. Sending as plain text.",
+          variant: "destructive",
+        });
+      }
+    }
+
     sendMessageMutation.mutate({ 
-      content,
-      replyToId: replyToMessage?.id 
+      content: finalContent,
+      replyToId: replyToMessage?.id,
+      isEncrypted 
     });
     setReplyToMessage(null);
   };
