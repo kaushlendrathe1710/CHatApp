@@ -1,7 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import type { MessageWithSender } from "@shared/schema";
-import { Check, CheckCheck, Download, FileText, Image as ImageIcon } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageReactions } from "@/components/MessageReactions";
 
@@ -14,6 +14,7 @@ interface ChatMessageProps {
   conversationId: string;
   onAddReaction?: (messageId: string, emoji: string) => void;
   onRemoveReaction?: (messageId: string) => void;
+  onReply?: (message: MessageWithSender) => void;
 }
 
 export function ChatMessage({ 
@@ -24,7 +25,8 @@ export function ChatMessage({
   currentUserId,
   conversationId,
   onAddReaction,
-  onRemoveReaction
+  onRemoveReaction,
+  onReply
 }: ChatMessageProps) {
   const senderName = getUserDisplayName(message.sender);
   const initials = senderName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -141,6 +143,20 @@ export function ChatMessage({
             {renderStatusIcon()}
           </div>
         </div>
+        
+        {/* Reply Button (visible on hover) */}
+        {onReply && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onReply(message)}
+            className="opacity-0 group-hover:opacity-100 transition-opacity h-6 text-xs"
+            data-testid={`button-reply-${message.id}`}
+          >
+            <Reply className="h-3 w-3 mr-1" />
+            Reply
+          </Button>
+        )}
         
         {/* Reactions */}
         <MessageReactions

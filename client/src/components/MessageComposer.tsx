@@ -1,9 +1,10 @@
 import { useState, useRef, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Smile } from "lucide-react";
+import { Paperclip, Send, Smile, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
+import type { MessageWithSender } from "@shared/schema";
 
 interface MessageComposerProps {
   onSendMessage: (content: string) => void;
@@ -11,6 +12,8 @@ interface MessageComposerProps {
   onTyping?: () => void;
   disabled?: boolean;
   placeholder?: string;
+  replyToMessage?: MessageWithSender | null;
+  onCancelReply?: () => void;
 }
 
 export function MessageComposer({
@@ -18,7 +21,9 @@ export function MessageComposer({
   onAttachFile,
   onTyping,
   disabled = false,
-  placeholder = "Type a message..."
+  placeholder = "Type a message...",
+  replyToMessage,
+  onCancelReply
 }: MessageComposerProps) {
   const [message, setMessage] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -60,6 +65,25 @@ export function MessageComposer({
 
   return (
     <div className="border-t bg-background p-4">
+      {replyToMessage && (
+        <div className="mb-2 flex items-center gap-2 bg-muted p-2 rounded-md" data-testid="reply-preview">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground">
+              Replying to {replyToMessage.sender.firstName || replyToMessage.sender.email}
+            </p>
+            <p className="text-sm truncate">{replyToMessage.content}</p>
+          </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={onCancelReply}
+            className="flex-shrink-0 h-6 w-6"
+            data-testid="button-cancel-reply"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
       <div className="flex items-end gap-2">
         {onAttachFile && (
           <Button

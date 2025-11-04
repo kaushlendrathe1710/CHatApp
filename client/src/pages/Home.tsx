@@ -50,6 +50,7 @@ export default function Home() {
   const [typingUsers, setTypingUsers] = useState<Map<string, Set<string>>>(new Map());
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [replyToMessage, setReplyToMessage] = useState<MessageWithSender | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
@@ -99,6 +100,9 @@ export default function Home() {
         if (message.data.userId !== user?.id) {
           queryClient.invalidateQueries({ queryKey: ['/api/messages', message.data.conversationId] });
         }
+      } else if (message.type === 'reaction_added' || message.type === 'message_edited') {
+        // Invalidate messages to show new reactions or edits
+        queryClient.invalidateQueries({ queryKey: ['/api/messages', message.data.conversationId] });
       }
     } catch (error) {
       console.error('Error handling WebSocket message:', error);
@@ -121,12 +125,13 @@ export default function Home() {
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ content, fileUrl, fileName, fileSize, type }: {
+    mutationFn: async ({ content, fileUrl, fileName, fileSize, type, replyToId }: {
       content?: string;
       fileUrl?: string;
       fileName?: string;
       fileSize?: number;
       type?: string;
+      replyToId?: string;
     }) => {
       return apiRequest('POST', '/api/messages', {
         conversationId: selectedConversationId,
@@ -135,6 +140,7 @@ export default function Home() {
         fileName,
         fileSize,
         type: type || 'text',
+        replyToId,
       });
     },
     onSuccess: () => {
@@ -195,6 +201,11 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Clear reply state when conversation changes
+  useEffect(() => {
+    setReplyToMessage(null);
+  }, [selectedConversationId]);
+
   // Send typing indicator
   const handleTyping = () => {
     if (!selectedConversationId || !user) return;
@@ -215,7 +226,41 @@ export default function Home() {
   };
 
   const handleSendMessage = (content: string) => {
-    sendMessageMutation.mutate({ content });
+    sendMessageMutation.mutate({ 
+      content,
+      replyToId: replyToMessage?.id 
+    });
+    setReplyToMessage(null);
+  };
+
+  const handleReply = (message: MessageWithSender) => {
+    setReplyToMessage(message);
+  };
+
+  const handleCancelReply = () => {
+    setReplyToMessage(null);
+  };
+
+  const handleAddReaction = async (messageId: string, emoji: string) => {
+    if (!selectedConversationId) return;
+    
+    try {
+      await apiRequest('POST', `/api/messages/${messageId}/reactions`, { emoji });
+      queryClient.invalidateQueries({ queryKey: ['/api/messages', selectedConversationId] });
+    } catch (error) {
+      console.error('Failed to add reaction:', error);
+    }
+  };
+
+  const handleRemoveReaction = async (messageId: string) => {
+    if (!selectedConversationId) return;
+    
+    try {
+      await apiRequest('DELETE', `/api/messages/${messageId}/reactions`);
+      queryClient.invalidateQueries({ queryKey: ['/api/messages', selectedConversationId] });
+    } catch (error) {
+      console.error('Failed to remove reaction:', error);
+    }
   };
 
   const getTypingUsersInConversation = () => {
@@ -487,6 +532,11 @@ export default function Home() {
                           isOwn={message.senderId === user?.id}
                           showAvatar={showAvatar}
                           isGroup={selectedConversation.isGroup}
+                          currentUserId={user?.id || ''}
+                          conversationId={selectedConversationId || ''}
+                          onAddReaction={handleAddReaction}
+                          onRemoveReaction={handleRemoveReaction}
+                          onReply={handleReply}
                         />
                       </div>
                     );
@@ -507,6 +557,8 @@ export default function Home() {
               onAttachFile={handleFileUpload}
               onTyping={handleTyping}
               disabled={sendMessageMutation.isPending}
+              replyToMessage={replyToMessage}
+              onCancelReply={handleCancelReply}
             />
           </>
         ) : (
