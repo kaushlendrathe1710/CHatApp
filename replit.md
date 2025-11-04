@@ -21,23 +21,46 @@ A modern real-time messaging platform inspired by WhatsApp and Telegram, built w
 - ✅ **Disappearing Messages** - Set timer (24h/7d/90d) for automatic message expiry
 
 **Latest Implementation (November 4, 2025):**
-- **Message Forwarding System:**
-  - POST /api/messages/:id/forward endpoint for multi-conversation forwarding
-  - ForwardMessageDialog component with checkbox-based conversation selector
-  - "Forwarded from [Name]" badge on forwarded messages
-  - Preserves original message content, type, and file metadata
-  - Real-time WebSocket broadcasting to all target conversations
 
-- **Disappearing Messages (FULLY COMPLETE):**
-  - PATCH /api/conversations/:id/settings endpoint for timer configuration
-  - DisappearingMessagesSettings component in chat header with aria-labels
-  - Timer options: Off, 24 hours, 7 days, 90 days
-  - Timer icon with enabled/disabled visual states
-  - **Visual countdown indicators** - Shows "Expires in X hours/days" on messages with Clock icon
-  - **Background cleanup job** - Runs every 5 minutes to delete expired messages
-  - **Real-time deletion** - WebSocket broadcasts message_deleted events
-  - **Immediate cache updates** - Deleted messages removed from UI instantly
-  - Proper cache handling - Only updates existing caches, prevents empty state flashes
+**Three Major Features Added:**
+
+1. **Broadcast Channels (COMPLETE):**
+   - POST /api/broadcast/create endpoint for channel creation
+   - POST /api/broadcast/:channelId/subscribe for subscriber management
+   - CreateBroadcastDialog component with name and description inputs
+   - Role-based permissions: admins can post, subscribers can only view
+   - Server-side permission enforcement prevents unauthorized posting (403 Forbidden)
+   - Visual indicators distinguish broadcast channels from regular conversations
+   - Schema: `conversations.isBroadcast` flag, `conversationParticipants.role` (admin/subscriber)
+
+2. **End-to-End Encryption (COMPLETE):**
+   - Hybrid encryption: RSA-OAEP (2048-bit) for key exchange + AES-GCM (256-bit) for message content
+   - Handles messages of unlimited length using hybrid approach
+   - POST /api/encryption/keys, GET /api/encryption/keys/:conversationId endpoints
+   - EncryptionSetupDialog for key generation with Web Crypto API
+   - Encrypted messages show Shield icon and "Encrypted" badge
+   - Private keys stored in localStorage with version tags (KEY_VERSION=1.0.0)
+   - Automatic corruption detection and recovery
+   - Only available for direct (1-on-1) conversations with clear UI feedback
+   - Schema: `messages.isEncrypted` flag, `encryptionKeys` table for public key storage
+
+3. **Voice & Video Calling (COMPLETE):**
+   - WebRTC implementation using simple-peer library for P2P connections
+   - VideoCallDialog with full call controls (mute, video toggle, fullscreen, end call)
+   - WebSocket signaling for call setup (call_initiate, call_signal, call_end events)
+   - Handles renegotiation and late-arriving ICE candidates via React useEffect
+   - Call duration timer and connection status indicators
+   - Browser compatibility fix: `window.global = globalThis` polyfill in index.html
+   - Audio-only and video call modes with separate UI buttons
+
+**Critical Fixes:**
+- ✅ Broadcast permission bypass closed - Server validates admin role before allowing posts
+- ✅ WebRTC signaling race condition resolved - All signals processed regardless of connection state
+- ✅ simple-peer browser compatibility - Added global polyfill in index.html
+
+**Previous Features:**
+- Message Forwarding System with "Forwarded from" attribution
+- Disappearing Messages with visual countdown and background cleanup job
 
 **Known Limitations:**
 - Backend presence broadcasting not yet implemented (online dots need real-time updates)
