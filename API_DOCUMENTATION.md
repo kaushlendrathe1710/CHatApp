@@ -9,8 +9,12 @@ Complete API reference for building mobile and web applications using this backe
 - [Conversations API](#conversations-api)
 - [Messages API](#messages-api)
 - [Reactions API](#reactions-api)
+- [Broadcast Channels API](#broadcast-channels-api)
+- [End-to-End Encryption API](#end-to-end-encryption-api)
+- [Voice & Video Calling API](#voice--video-calling-api)
 - [Object Storage API](#object-storage-api)
 - [Error Handling](#error-handling)
+- [Mobile App Integration](#mobile-app-integration-example)
 
 ---
 
@@ -138,6 +142,26 @@ ws.onmessage = (event) => {
     case 'settings_updated':
       // Conversation settings changed
       // message.data = { conversationId, disappearingMessagesTimer }
+      break;
+      
+    case 'call_initiate':
+      // Incoming call request
+      // message.data = { conversationId, callerId, callerName, isVideoCall }
+      break;
+      
+    case 'call_signal':
+      // WebRTC signaling data
+      // message.data = { signal, conversationId }
+      break;
+      
+    case 'call_end':
+      // Call ended
+      // message.data = { conversationId }
+      break;
+      
+    case 'encryption_key_added':
+      // Encryption key was added to conversation
+      // message.data = { conversationId, userId }
       break;
   }
 };
@@ -491,6 +515,345 @@ Remove your reaction from a message.
   "success": true
 }
 ```
+
+---
+
+## Broadcast Channels API
+
+Broadcast channels enable one-to-many communication where only admins can post messages, but all subscribers can view them.
+
+### Create Broadcast Channel
+**Endpoint:** `POST /api/broadcast/create`
+
+Create a new broadcast channel. Creator becomes the admin.
+
+**Request Body:**
+```json
+{
+  "name": "Tech News Updates",
+  "description": "Latest technology announcements and updates"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "conv-uuid",
+  "isGroup": false,
+  "isBroadcast": true,
+  "name": "Tech News Updates",
+  "description": "Latest technology announcements and updates",
+  "createdAt": "2025-11-04T11:00:00Z",
+  "updatedAt": "2025-11-04T11:00:00Z",
+  "participants": [
+    {
+      "userId": "creator-uuid",
+      "conversationId": "conv-uuid",
+      "role": "admin",
+      "joinedAt": "2025-11-04T11:00:00Z"
+    }
+  ]
+}
+```
+
+**Error Responses:**
+- `400 Bad Request` - Missing required field "name"
+- `401 Unauthorized` - Not authenticated
+
+### Subscribe to Broadcast Channel
+**Endpoint:** `POST /api/broadcast/:channelId/subscribe`
+
+Subscribe to an existing broadcast channel as a subscriber (view-only).
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Error Responses:**
+- `404 Not Found` - Channel not found
+- `409 Conflict` - Already subscribed
+
+### Posting to Broadcast Channels
+Use the standard `POST /api/messages` endpoint to post messages. The server will:
+- Allow messages from admins only
+- Return `403 Forbidden` for subscribers attempting to post
+
+**Important Notes:**
+- Only users with `role: "admin"` can post messages
+- Subscribers can only view messages
+- Broadcast channels do not support end-to-end encryption
+- Broadcast channels appear in the conversations list with special visual indicators
+
+---
+
+## End-to-End Encryption API
+
+End-to-end encryption (E2EE) is available for direct (1-on-1) conversations only using hybrid RSA-OAEP + AES-GCM encryption.
+
+### Store Public Key
+**Endpoint:** `POST /api/encryption/keys`
+
+Store a user's public encryption key for a conversation.
+
+**Request Body:**
+```json
+{
+  "conversationId": "conv-uuid",
+  "publicKey": "base64-encoded-public-key"
+}
+```
+
+**Key Generation (Web Crypto API):**
+```javascript
+// Generate RSA key pair
+const keyPair = await window.crypto.subtle.generateKey(
+  {
+    name: "RSA-OAEP",
+    modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]),
+    hash: "SHA-256",
+  },
+  true,
+  ["encrypt", "decrypt"]
+);
+
+// Export public key
+const publicKeyBuffer = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
+const publicKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(publicKeyBuffer)));
+
+// Store private key in localStorage
+const privateKeyBuffer = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+const privateKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(privateKeyBuffer)));
+localStorage.setItem(`privateKey_${conversationId}_v1.0.0`, privateKeyBase64);
+```
+
+**Response:**
+```json
+{
+  "id": "key-uuid",
+  "conversationId": "conv-uuid",
+  "userId": "user-uuid",
+  "publicKey": "base64-encoded-public-key",
+  "createdAt": "2025-11-04T11:15:00Z"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request` - Missing required fields
+- `409 Conflict` - Key already exists (use this to update)
+
+### Get Encryption Keys
+**Endpoint:** `GET /api/encryption/keys/:conversationId`
+
+Retrieve all public keys for a conversation.
+
+**Response:**
+```json
+[
+  {
+    "id": "key-uuid-1",
+    "conversationId": "conv-uuid",
+    "userId": "user-uuid-1",
+    "publicKey": "base64-encoded-public-key-1",
+    "createdAt": "2025-11-04T11:15:00Z"
+  },
+  {
+    "id": "key-uuid-2",
+    "conversationId": "conv-uuid",
+    "userId": "user-uuid-2",
+    "publicKey": "base64-encoded-public-key-2",
+    "createdAt": "2025-11-04T11:16:00Z"
+  }
+]
+```
+
+### Encrypting Messages
+Messages are encrypted client-side before sending:
+
+```javascript
+// Hybrid encryption for messages (handles unlimited length)
+async function encryptMessage(content, recipientPublicKeyBase64) {
+  // Generate random AES key
+  const aesKey = await window.crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"]
+  );
+  
+  // Encrypt message with AES
+  const encoder = new TextEncoder();
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const encryptedContent = await window.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    aesKey,
+    encoder.encode(content)
+  );
+  
+  // Export AES key
+  const aesKeyBuffer = await window.crypto.subtle.exportKey("raw", aesKey);
+  
+  // Import recipient's public key
+  const publicKeyBuffer = Uint8Array.from(atob(recipientPublicKeyBase64), c => c.charCodeAt(0));
+  const publicKey = await window.crypto.subtle.importKey(
+    "spki",
+    publicKeyBuffer,
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["encrypt"]
+  );
+  
+  // Encrypt AES key with RSA
+  const encryptedKey = await window.crypto.subtle.encrypt(
+    { name: "RSA-OAEP" },
+    publicKey,
+    aesKeyBuffer
+  );
+  
+  // Combine encrypted key + iv + encrypted content
+  return {
+    key: btoa(String.fromCharCode(...new Uint8Array(encryptedKey))),
+    iv: btoa(String.fromCharCode(...new Uint8Array(iv))),
+    content: btoa(String.fromCharCode(...new Uint8Array(encryptedContent)))
+  };
+}
+```
+
+**Sending Encrypted Message:**
+```json
+{
+  "conversationId": "conv-uuid",
+  "content": "{\"key\":\"...\",\"iv\":\"...\",\"content\":\"...\"}",
+  "type": "text",
+  "isEncrypted": true
+}
+```
+
+**Important Notes:**
+- Only available for direct (1-on-1) conversations
+- Not supported for groups or broadcast channels
+- Private keys stored in browser localStorage
+- Messages show "Encrypted" badge and shield icon
+- Server stores only public keys in database
+
+---
+
+## Voice & Video Calling API
+
+Real-time voice and video calls using WebRTC with WebSocket signaling.
+
+### WebSocket Call Signaling
+
+#### Initiate Call
+**Client → Server:**
+```javascript
+ws.send(JSON.stringify({
+  type: 'call_initiate',
+  data: {
+    conversationId: 'conv-uuid',
+    callerId: 'user-uuid',
+    callerName: 'John Doe',
+    isVideoCall: true // false for audio-only
+  }
+}));
+```
+
+**Server → Recipient:**
+```json
+{
+  "type": "call_initiate",
+  "data": {
+    "conversationId": "conv-uuid",
+    "callerId": "user-uuid",
+    "callerName": "John Doe",
+    "isVideoCall": true
+  }
+}
+```
+
+#### Send WebRTC Signal
+**Client → Server:**
+```javascript
+ws.send(JSON.stringify({
+  type: 'call_signal',
+  data: {
+    conversationId: 'conv-uuid',
+    signal: peerSignalData // From simple-peer library
+  }
+}));
+```
+
+**Server → Peer:**
+```json
+{
+  "type": "call_signal",
+  "data": {
+    "signal": {},
+    "conversationId": "conv-uuid"
+  }
+}
+```
+
+#### End Call
+**Client → Server:**
+```javascript
+ws.send(JSON.stringify({
+  type: 'call_end',
+  data: {
+    conversationId: 'conv-uuid'
+  }
+}));
+```
+
+### WebRTC Implementation Example
+
+```javascript
+import SimplePeer from 'simple-peer';
+
+// Initialize peer connection (caller)
+const peer = new SimplePeer({
+  initiator: true,
+  trickle: true,
+  stream: localStream, // From getUserMedia
+});
+
+peer.on('signal', (signal) => {
+  // Send signal via WebSocket
+  ws.send(JSON.stringify({
+    type: 'call_signal',
+    data: { conversationId, signal }
+  }));
+});
+
+peer.on('stream', (remoteStream) => {
+  // Display remote video/audio
+  remoteVideoElement.srcObject = remoteStream;
+});
+
+// When receiving signal from other peer
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  if (message.type === 'call_signal') {
+    peer.signal(message.data.signal);
+  }
+};
+
+// Get user media
+const localStream = await navigator.mediaDevices.getUserMedia({
+  video: isVideoCall,
+  audio: true
+});
+```
+
+**Important Notes:**
+- Requires `simple-peer` library for WebRTC
+- Browser polyfill: `window.global = globalThis` in HTML
+- Supports both audio-only and video calls
+- Peer-to-peer (P2P) connection
+- Call duration tracked on client
+- Only available for direct conversations
 
 ---
 

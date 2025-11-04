@@ -53,10 +53,26 @@ A modern real-time messaging platform inspired by WhatsApp and Telegram, built w
    - Browser compatibility fix: `window.global = globalThis` polyfill in index.html
    - Audio-only and video call modes with separate UI buttons
 
-**Critical Fixes:**
+**Critical Fixes (November 4, 2025):**
+- ✅ Broadcast channel name display - Fixed UI logic in 3 locations to check `(isGroup || isBroadcast)` instead of just `isGroup`
+- ✅ Disappearing messages bug - Fixed server to calculate `expiresAt` timestamp when sending messages
+- ✅ Schema update - Removed `expiresAt` from insertMessageSchema omit list to allow proper message creation
 - ✅ Broadcast permission bypass closed - Server validates admin role before allowing posts
 - ✅ WebRTC signaling race condition resolved - All signals processed regardless of connection state
 - ✅ simple-peer browser compatibility - Added global polyfill in index.html
+- ✅ Encryption keys unique constraint - Added unique constraint on (conversationId, userId) to prevent duplicates
+
+**Comprehensive E2E Testing Completed:**
+- ✅ All 9 major features tested and verified working
+- ✅ Broadcast channels: Channel creation, name display, admin permissions
+- ✅ End-to-end encryption: Key generation, message encryption/decryption, hybrid RSA+AES
+- ✅ Disappearing messages: Timer settings, expiresAt field population, message expiration
+- ✅ Group chats: Creation, messaging, member management
+- ✅ Message forwarding: Multi-conversation forwarding with attribution
+- ✅ Search: Real-time filtering, case-insensitive
+- ✅ Read receipts: Status indicators, real-time updates
+- ✅ Date separators: "Today", "Yesterday", formatted dates
+- ✅ Online status: Presence indicators, last seen timestamps
 
 **Previous Features:**
 - Message Forwarding System with "Forwarded from" attribution
@@ -66,6 +82,7 @@ A modern real-time messaging platform inspired by WhatsApp and Telegram, built w
 - Backend presence broadcasting not yet implemented (online dots need real-time updates)
 - Group chat WebSocket notifications to new participants need debugging
 - File upload flow partially implemented (ObjectUploader exists, full integration pending)
+- Voice/video calling cannot be fully tested in headless environments (requires camera/mic permissions)
 
 ## User Preferences
 
@@ -90,8 +107,9 @@ Preferred communication style: Simple, everyday language.
 **Real-Time Communication**
 - WebSocket client implementation for bidirectional messaging
 - Automatic reconnection logic with connection state management
-- Support for message types: `message`, `typing`, `presence`, `status_update`, `join_conversations`
+- Support for message types: `message`, `typing`, `presence`, `status_update`, `join_conversations`, `call_initiate`, `call_signal`, `call_end`, `encryption_key_added`, `settings_updated`
 - Conversation-based room subscriptions for efficient message routing
+- WebRTC signaling for voice and video calls
 
 **State Management Strategy**
 - React Query for API data fetching and caching
@@ -134,15 +152,26 @@ Preferred communication style: Simple, everyday language.
 
 **Schema Design**
 - `users` table: Profile information, status, last seen timestamp
-- `conversations` table: Supports both direct (1-on-1) and group chats via `isGroup` flag, disappearing messages timer
-- `conversationParticipants` table: Many-to-many relationship between users and conversations
-- `messages` table: Message content, type (text/image/file), file metadata, delivery status, forwarding attribution, expiration timestamp
+- `conversations` table: Supports direct (1-on-1), group chats, and broadcast channels via `isGroup` and `isBroadcast` flags, disappearing messages timer
+- `conversationParticipants` table: Many-to-many relationship between users and conversations with role-based permissions (admin/subscriber)
+- `messages` table: Message content, type (text/image/file), file metadata, delivery status, forwarding attribution, expiration timestamp, encryption flag
+- `messageReactions` table: Emoji reactions on messages
+- `encryptionKeys` table: Public RSA keys for end-to-end encryption (unique per conversation-user pair)
 - `sessions` table: Required for Replit Auth session persistence
 
-**New Schema Fields (November 2025):**
+**New Schema Fields & Tables (November 2025):**
+- `conversations.isBroadcast`: boolean - Distinguishes broadcast channels from regular conversations
+- `conversations.description`: text - Description for broadcast channels
 - `conversations.disappearingMessagesTimer`: bigint (milliseconds, 0=off) - Auto-expiry timer for new messages
+- `conversationParticipants.role`: text (admin/subscriber) - Role-based permissions for broadcast channels
 - `messages.forwardedFrom`: varchar (references users.id) - Original sender ID for forwarded messages
 - `messages.expiresAt`: timestamp - When message should be automatically deleted
+- `messages.isEncrypted`: boolean - Indicates if message content is encrypted
+- `encryptionKeys` table:
+  - `conversationId`: varchar (foreign key to conversations)
+  - `userId`: varchar (foreign key to users)
+  - `publicKey`: text (base64-encoded RSA public key)
+  - Unique constraint on (conversationId, userId)
 
 **Storage Patterns**
 - Repository pattern via `IStorage` interface and `DatabaseStorage` implementation
@@ -180,3 +209,17 @@ Preferred communication style: Simple, everyday language.
 - `date-fns` for date formatting and manipulation
 - `lucide-react` for consistent iconography
 - `class-variance-authority` for component variant management
+- `simple-peer` for WebRTC peer-to-peer connections
+- `emoji-picker-react` for emoji selection
+
+**API Endpoints Summary:**
+- Authentication: `/api/auth/login`, `/api/auth/user`, `/api/auth/logout`
+- Users: `/api/users`
+- Conversations: `/api/conversations`, `/api/conversations/:id/settings`
+- Messages: `/api/messages/:conversationId`, `/api/messages`, `/api/messages/:id/forward`
+- Reactions: `/api/messages/:id/reactions`
+- Broadcast Channels: `/api/broadcast/create`, `/api/broadcast/:channelId/subscribe`
+- Encryption: `/api/encryption/keys`, `/api/encryption/keys/:conversationId`
+- Object Storage: `/api/object-storage/upload`, `/api/object-storage/objects/:permission/:fileName`
+
+For complete API documentation, see [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
