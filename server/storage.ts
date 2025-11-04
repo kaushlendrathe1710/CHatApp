@@ -50,7 +50,7 @@ export interface IStorage {
   
   // Disappearing messages operations
   updateDisappearingMessagesTimer(conversationId: string, timerMs: number): Promise<Conversation>;
-  deleteExpiredMessages(): Promise<number>;
+  deleteExpiredMessages(): Promise<Array<{ messageId: string; conversationId: string }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -434,7 +434,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async deleteExpiredMessages(): Promise<number> {
+  async deleteExpiredMessages(): Promise<Array<{ messageId: string; conversationId: string }>> {
     const result = await db
       .delete(messages)
       .where(
@@ -443,9 +443,9 @@ export class DatabaseStorage implements IStorage {
           sql`${messages.expiresAt} < NOW()`
         )
       )
-      .returning({ id: messages.id });
+      .returning({ id: messages.id, conversationId: messages.conversationId });
     
-    return result.length;
+    return result.map(r => ({ messageId: r.id, conversationId: r.conversationId }));
   }
 }
 

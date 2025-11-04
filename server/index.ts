@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import { registerRoutes, broadcastToConversation } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { storage } from "./storage";
 
 const app = express();
 
@@ -78,4 +79,33 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
   });
+
+  // Background cleanup job for disappearing messages
+  // Run every 5 minutes to check for expired messages
+  const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+  
+  const runCleanup = async () => {
+    try {
+      const deletedMessages = await storage.deleteExpiredMessages();
+      
+      if (deletedMessages.length > 0) {
+        log(`Deleted ${deletedMessages.length} expired message(s)`);
+        
+        // Broadcast message deletions to relevant conversations
+        deletedMessages.forEach(({ messageId, conversationId }) => {
+          broadcastToConversation(conversationId, {
+            type: 'message_deleted',
+            data: { messageId, conversationId },
+          });
+        });
+      }
+    } catch (error) {
+      console.error('Error running cleanup job:', error);
+    }
+  };
+
+  // Run cleanup immediately on startup, then every 5 minutes
+  runCleanup();
+  setInterval(runCleanup, CLEANUP_INTERVAL_MS);
+  log('Disappearing messages cleanup job started');
 })();

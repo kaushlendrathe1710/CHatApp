@@ -1,7 +1,8 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import type { MessageWithSender } from "@shared/schema";
-import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { MessageReactions } from "@/components/MessageReactions";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,6 +52,23 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const senderName = getUserDisplayName(message.sender);
   const initials = senderName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+  const getExpirationText = () => {
+    if (!message.expiresAt) return null;
+    
+    const expiresAt = new Date(message.expiresAt);
+    const now = new Date();
+    
+    if (expiresAt <= now) {
+      return "Expired";
+    }
+    
+    try {
+      return `Expires ${formatDistanceToNow(expiresAt, { addSuffix: true })}`;
+    } catch (error) {
+      return null;
+    }
+  };
 
   const renderForwardedFromBadge = () => {
     if (!message.forwardedFromUser) return null;
@@ -201,18 +219,30 @@ export function ChatMessage({
           {renderForwardedFromBadge()}
           {renderMessageContent()}
           
-          <div className={`flex items-center gap-1 mt-1 justify-end ${
-            isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
-          }`}>
-            {message.isEdited && (
-              <span className="text-xs italic" data-testid="text-edited-indicator">
-                edited
+          <div className={`flex flex-col gap-0.5 mt-1`}>
+            <div className={`flex items-center gap-1 justify-end ${
+              isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
+            }`}>
+              {message.isEdited && (
+                <span className="text-xs italic" data-testid="text-edited-indicator">
+                  edited
+                </span>
+              )}
+              <span className="text-xs" data-testid="text-message-time">
+                {formatMessageTime(message.createdAt!)}
               </span>
+              {renderStatusIcon()}
+            </div>
+            {getExpirationText() && (
+              <div className={`flex items-center gap-1 justify-end ${
+                isOwn ? 'text-primary-foreground/60' : 'text-muted-foreground/80'
+              }`}>
+                <Clock className="h-3 w-3" />
+                <span className="text-xs" data-testid={`text-expiration-${message.id}`}>
+                  {getExpirationText()}
+                </span>
+              </div>
             )}
-            <span className="text-xs" data-testid="text-message-time">
-              {formatMessageTime(message.createdAt!)}
-            </span>
-            {renderStatusIcon()}
           </div>
         </div>
         

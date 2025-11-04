@@ -109,6 +109,13 @@ export default function Home() {
       } else if (message.type === 'reaction_added' || message.type === 'message_edited') {
         // Invalidate messages to show new reactions or edits
         queryClient.invalidateQueries({ queryKey: ['/api/messages', message.data.conversationId] });
+      } else if (message.type === 'message_deleted') {
+        // Remove deleted message from the UI
+        queryClient.invalidateQueries({ queryKey: ['/api/messages', message.data.conversationId] });
+        queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+      } else if (message.type === 'settings_updated') {
+        // Update conversation settings (e.g., disappearing messages timer)
+        queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
       }
     } catch (error) {
       console.error('Error handling WebSocket message:', error);

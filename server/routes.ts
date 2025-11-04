@@ -10,7 +10,7 @@ import { insertConversationSchema, insertMessageSchema } from "@shared/schema";
 // WebSocket client tracking
 const wsClients = new Map<string, Set<WebSocket>>();
 
-function broadcastToConversation(conversationId: string, message: any) {
+export function broadcastToConversation(conversationId: string, message: any) {
   const clients = wsClients.get(conversationId);
   if (clients) {
     const messageStr = JSON.stringify(message);
