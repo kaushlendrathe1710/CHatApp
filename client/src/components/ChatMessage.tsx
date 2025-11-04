@@ -1,9 +1,16 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import type { MessageWithSender } from "@shared/schema";
-import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageReactions } from "@/components/MessageReactions";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ChatMessageProps {
   message: MessageWithSender;
@@ -15,6 +22,12 @@ interface ChatMessageProps {
   onAddReaction?: (messageId: string, emoji: string) => void;
   onRemoveReaction?: (messageId: string) => void;
   onReply?: (message: MessageWithSender) => void;
+  onEdit?: (message: MessageWithSender) => void;
+  isEditing?: boolean;
+  editContent?: string;
+  onEditContentChange?: (content: string) => void;
+  onSaveEdit?: () => void;
+  onCancelEdit?: () => void;
 }
 
 export function ChatMessage({ 
@@ -26,12 +39,51 @@ export function ChatMessage({
   conversationId,
   onAddReaction,
   onRemoveReaction,
-  onReply
+  onReply,
+  onEdit,
+  isEditing = false,
+  editContent = '',
+  onEditContentChange,
+  onSaveEdit,
+  onCancelEdit
 }: ChatMessageProps) {
   const senderName = getUserDisplayName(message.sender);
   const initials = senderName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
   const renderMessageContent = () => {
+    // If editing, show textarea
+    if (isEditing && message.type === 'text') {
+      return (
+        <div className="space-y-2">
+          <Textarea
+            value={editContent}
+            onChange={(e) => onEditContentChange?.(e.target.value)}
+            className="min-h-[60px] resize-none"
+            data-testid={`input-edit-message-${message.id}`}
+            autoFocus
+          />
+          <div className="flex gap-2 justify-end">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onCancelEdit}
+              data-testid={`button-cancel-edit-${message.id}`}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={onSaveEdit}
+              data-testid={`button-save-edit-${message.id}`}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    
+    // Regular message rendering
     if (message.type === 'image' && message.fileUrl) {
       return (
         <div className="space-y-2">
@@ -137,6 +189,11 @@ export function ChatMessage({
           <div className={`flex items-center gap-1 mt-1 justify-end ${
             isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
           }`}>
+            {message.isEdited && (
+              <span className="text-xs italic" data-testid="text-edited-indicator">
+                edited
+              </span>
+            )}
             <span className="text-xs" data-testid="text-message-time">
               {formatMessageTime(message.createdAt!)}
             </span>
@@ -144,18 +201,34 @@ export function ChatMessage({
           </div>
         </div>
         
-        {/* Reply Button (visible on hover) */}
-        {onReply && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => onReply(message)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity h-6 text-xs"
-            data-testid={`button-reply-${message.id}`}
-          >
-            <Reply className="h-3 w-3 mr-1" />
-            Reply
-          </Button>
+        {/* Message Actions Menu (visible on hover) */}
+        {!isEditing && (onReply || (onEdit && isOwn)) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
+                data-testid={`button-message-menu-${message.id}`}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align={isOwn ? "end" : "start"}>
+              {onReply && (
+                <DropdownMenuItem onClick={() => onReply(message)} data-testid={`menu-reply-${message.id}`}>
+                  <Reply className="h-4 w-4 mr-2" />
+                  Reply
+                </DropdownMenuItem>
+              )}
+              {onEdit && isOwn && message.type === 'text' && (
+                <DropdownMenuItem onClick={() => onEdit(message)} data-testid={`menu-edit-${message.id}`}>
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         
         {/* Reactions */}

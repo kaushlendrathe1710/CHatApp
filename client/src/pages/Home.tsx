@@ -51,6 +51,8 @@ export default function Home() {
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<MessageWithSender | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
@@ -201,9 +203,11 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Clear reply state when conversation changes
+  // Clear reply and edit state when conversation changes
   useEffect(() => {
     setReplyToMessage(null);
+    setEditingMessageId(null);
+    setEditContent("");
   }, [selectedConversationId]);
 
   // Send typing indicator
@@ -239,6 +243,34 @@ export default function Home() {
 
   const handleCancelReply = () => {
     setReplyToMessage(null);
+  };
+
+  const handleEdit = (message: MessageWithSender) => {
+    setEditingMessageId(message.id);
+    setEditContent(message.content || '');
+  };
+
+  const handleSaveEdit = async (messageId: string) => {
+    if (!editContent.trim()) return;
+    
+    try {
+      await apiRequest('PATCH', `/api/messages/${messageId}`, { content: editContent });
+      setEditingMessageId(null);
+      setEditContent('');
+      queryClient.invalidateQueries({ queryKey: ['/api/messages', selectedConversationId] });
+    } catch (error) {
+      console.error('Failed to edit message:', error);
+      toast({
+        title: "Error",
+        description: "Failed to edit message",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditContent('');
   };
 
   const handleAddReaction = async (messageId: string, emoji: string) => {
@@ -537,6 +569,12 @@ export default function Home() {
                           onAddReaction={handleAddReaction}
                           onRemoveReaction={handleRemoveReaction}
                           onReply={handleReply}
+                          onEdit={handleEdit}
+                          isEditing={editingMessageId === message.id}
+                          editContent={editContent}
+                          onEditContentChange={setEditContent}
+                          onSaveEdit={() => handleSaveEdit(message.id)}
+                          onCancelEdit={handleCancelEdit}
                         />
                       </div>
                     );
