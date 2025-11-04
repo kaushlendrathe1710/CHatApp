@@ -240,6 +240,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Forward message to other conversations
+  app.post('/api/messages/:messageId/forward', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { messageId } = req.params;
+      const { conversationIds } = req.body;
+
+      if (!conversationIds || !Array.isArray(conversationIds) || conversationIds.length === 0) {
+        return res.status(400).json({ message: "conversationIds array is required" });
+      }
+
+      const forwardedMessages = await storage.forwardMessage(messageId, conversationIds, userId);
+
+      // Broadcast forwarded messages via WebSocket to each conversation
+      forwardedMessages.forEach(msg => {
+        broadcastToConversation(msg.conversationId, {
+          type: 'message',
+          data: { ...msg, conversationId: msg.conversationId },
+        });
+      });
+
+      res.json(forwardedMessages);
+    } catch (error) {
+      console.error("Error forwarding message:", error);
+      res.status(500).json({ message: "Failed to forward message" });
+    }
+  });
+
+  // Update conversation settings (disappearing messages)
+  app.patch('/api/conversations/:conversationId/settings', isAuthenticated, async (req: any, res) => {
+    try {
+      const { conversationId } = req.params;
+      const { disappearingMessagesTimer } = req.body;
+
+      if (disappearingMessagesTimer === undefined) {
+        return res.status(400).json({ message: "disappearingMessagesTimer is required" });
+      }
+
+      const conversation = await storage.updateDisappearingMessagesTimer(conversationId, disappearingMessagesTimer);
+
+      // Broadcast settings update via WebSocket
+      broadcastToConversation(conversationId, {
+        type: 'settings_updated',
+        data: { conversationId, disappearingMessagesTimer },
+      });
+
+      res.json(conversation);
+    } catch (error) {
+      console.error("Error updating conversation settings:", error);
+      res.status(500).json({ message: "Failed to update conversation settings" });
+    }
+  });
+
   // Object storage routes
   app.get("/objects/:objectPath(*)", isAuthenticated, async (req: any, res) => {
     const userId = req.user?.claims?.sub;

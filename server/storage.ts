@@ -41,11 +41,16 @@ export interface IStorage {
   updateConversationReadStatus(conversationId: string, userId: string): Promise<void>;
   markMessagesAsRead(conversationId: string, userId: string): Promise<number>;
   updateMessage(messageId: string, content: string): Promise<Message>;
+  forwardMessage(messageId: string, conversationIds: string[], forwardedByUserId: string): Promise<Message[]>;
   
   // Reaction operations
   addReaction(reaction: InsertMessageReaction): Promise<MessageReaction>;
   removeReaction(messageId: string, userId: string): Promise<void>;
   getMessageReactions(messageId: string): Promise<MessageReaction[]>;
+  
+  // Disappearing messages operations
+  updateDisappearingMessagesTimer(conversationId: string, timerMs: number): Promise<Conversation>;
+  deleteExpiredMessages(): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -216,6 +221,7 @@ export class DatabaseStorage implements IStorage {
 
     const messageIds = msgs.map(m => m.message.id);
     const replyToIds = msgs.map(m => m.message.replyToId).filter(Boolean) as string[];
+    const forwardedFromIds = msgs.map(m => m.message.forwardedFrom).filter(Boolean) as string[];
     
     const reactions = messageIds.length > 0 ? await db
       .select({
@@ -234,6 +240,11 @@ export class DatabaseStorage implements IStorage {
       .from(messages)
       .innerJoin(users, eq(messages.senderId, users.id))
       .where(inArray(messages.id, replyToIds)) : [];
+
+    const forwardedFromUsers = forwardedFromIds.length > 0 ? await db
+      .select()
+      .from(users)
+      .where(inArray(users.id, forwardedFromIds)) : [];
 
     const reactionsMap = new Map<string, any[]>();
     reactions.forEach(r => {
@@ -254,11 +265,17 @@ export class DatabaseStorage implements IStorage {
       });
     });
 
+    const forwardedFromUsersMap = new Map<string, User>();
+    forwardedFromUsers.forEach(u => {
+      forwardedFromUsersMap.set(u.id, u);
+    });
+
     return msgs.map(row => ({
       ...row.message,
       sender: row.sender,
       reactions: reactionsMap.get(row.message.id) || [],
       replyTo: row.message.replyToId ? repliedMessagesMap.get(row.message.replyToId) : undefined,
+      forwardedFromUser: row.message.forwardedFrom ? forwardedFromUsersMap.get(row.message.forwardedFrom) : undefined,
     }));
   }
 
@@ -364,6 +381,71 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(messageReactions)
       .where(eq(messageReactions.messageId, messageId));
+  }
+
+  async forwardMessage(messageId: string, conversationIds: string[], forwardedByUserId: string): Promise<Message[]> {
+    const [originalMessage] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, messageId));
+
+    if (!originalMessage) {
+      throw new Error('Message not found');
+    }
+
+    const forwardedMessages: Message[] = [];
+    
+    for (const conversationId of conversationIds) {
+      const [forwarded] = await db
+        .insert(messages)
+        .values({
+          conversationId,
+          senderId: forwardedByUserId,
+          content: originalMessage.content,
+          type: originalMessage.type,
+          fileUrl: originalMessage.fileUrl,
+          fileName: originalMessage.fileName,
+          fileSize: originalMessage.fileSize,
+          forwardedFrom: originalMessage.senderId,
+        })
+        .returning();
+      
+      await db
+        .update(conversations)
+        .set({ updatedAt: new Date() })
+        .where(eq(conversations.id, conversationId));
+
+      forwardedMessages.push(forwarded);
+    }
+
+    return forwardedMessages;
+  }
+
+  async updateDisappearingMessagesTimer(conversationId: string, timerMs: number): Promise<Conversation> {
+    const [updated] = await db
+      .update(conversations)
+      .set({ 
+        disappearingMessagesTimer: timerMs,
+        updatedAt: new Date() 
+      })
+      .where(eq(conversations.id, conversationId))
+      .returning();
+    
+    return updated;
+  }
+
+  async deleteExpiredMessages(): Promise<number> {
+    const result = await db
+      .delete(messages)
+      .where(
+        and(
+          sql`${messages.expiresAt} IS NOT NULL`,
+          sql`${messages.expiresAt} < NOW()`
+        )
+      )
+      .returning({ id: messages.id });
+    
+    return result.length;
   }
 }
 

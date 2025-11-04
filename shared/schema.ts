@@ -47,6 +47,7 @@ export const conversations = pgTable("conversations", {
   isGroup: boolean("is_group").default(false).notNull(),
   avatarUrl: varchar("avatar_url"),
   createdBy: varchar("created_by").references(() => users.id),
+  disappearingMessagesTimer: integer("disappearing_messages_timer").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -93,12 +94,15 @@ export const messages = pgTable("messages", {
   status: text("status").default("sent").notNull(), // sent, delivered, read
   replyToId: varchar("reply_to_id").references((): any => messages.id),
   isEdited: boolean("is_edited").default(false),
+  forwardedFrom: varchar("forwarded_from").references(() => users.id),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at"),
 }, (table) => [
   index("idx_messages_conversation").on(table.conversationId),
   index("idx_messages_created").on(table.createdAt),
   index("idx_messages_reply_to").on(table.replyToId),
+  index("idx_messages_expires_at").on(table.expiresAt),
 ]);
 
 export const insertMessageSchema = createInsertSchema(messages).omit({
@@ -107,6 +111,7 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   status: true,
   isEdited: true,
   updatedAt: true,
+  expiresAt: true,
 });
 
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
@@ -186,6 +191,10 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     fields: [messages.replyToId],
     references: [messages.id],
   }),
+  forwardedFromUser: one(users, {
+    fields: [messages.forwardedFrom],
+    references: [users.id],
+  }),
   reactions: many(messageReactions),
 }));
 
@@ -215,4 +224,5 @@ export type MessageWithSender = Message & {
   sender: User;
   reactions?: MessageReactionWithUser[];
   replyTo?: Message & { sender: User };
+  forwardedFromUser?: User;
 };
