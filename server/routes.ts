@@ -153,6 +153,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Calculate expiresAt if disappearing messages is enabled
+      let expiresAt: Date | null = null;
+      if (conversation?.disappearingMessagesTimer && conversation.disappearingMessagesTimer > 0) {
+        const timerMs = Number(conversation.disappearingMessagesTimer);
+        expiresAt = new Date(Date.now() + timerMs);
+      }
+
       const message = await storage.createMessage({
         conversationId,
         senderId: userId,
@@ -162,6 +169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileName,
         fileSize,
         replyToId,
+        expiresAt,
       });
 
       // Broadcast new message via WebSocket

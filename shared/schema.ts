@@ -118,7 +118,6 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   status: true,
   isEdited: true,
   updatedAt: true,
-  expiresAt: true,
 });
 
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
