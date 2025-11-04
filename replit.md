@@ -17,11 +17,30 @@ A modern real-time messaging platform inspired by WhatsApp and Telegram, built w
 - ✅ Search functionality filtering conversations by name
 - ✅ Mobile-responsive design with menu toggle
 - ✅ File/image message preview icons (replaced emoji with lucide-react icons)
+- ✅ **Message Forwarding** - Forward messages to multiple conversations with "Forwarded from" attribution
+- ✅ **Disappearing Messages** - Set timer (24h/7d/90d) for automatic message expiry
+
+**Latest Implementation (November 4, 2025):**
+- **Message Forwarding System:**
+  - POST /api/messages/:id/forward endpoint for multi-conversation forwarding
+  - ForwardMessageDialog component with checkbox-based conversation selector
+  - "Forwarded from [Name]" badge on forwarded messages
+  - Preserves original message content, type, and file metadata
+  - Real-time WebSocket broadcasting to all target conversations
+
+- **Disappearing Messages:**
+  - PATCH /api/conversations/:id/settings endpoint for timer configuration
+  - DisappearingMessagesSettings component in chat header
+  - Timer options: Off, 24 hours, 7 days, 90 days
+  - Timer icon with enabled/disabled visual states
+  - Backend cleanup method ready for cron job implementation
+  - Success toasts on timer changes with accessible aria-labels
 
 **Known Limitations:**
 - Backend presence broadcasting not yet implemented (online dots need real-time updates)
 - Group chat WebSocket notifications to new participants need debugging
 - File upload flow partially implemented (ObjectUploader exists, full integration pending)
+- Disappearing messages cleanup job requires cron scheduler integration
 
 ## User Preferences
 
@@ -90,10 +109,15 @@ Preferred communication style: Simple, everyday language.
 
 **Schema Design**
 - `users` table: Profile information, status, last seen timestamp
-- `conversations` table: Supports both direct (1-on-1) and group chats via `isGroup` flag
+- `conversations` table: Supports both direct (1-on-1) and group chats via `isGroup` flag, disappearing messages timer
 - `conversationParticipants` table: Many-to-many relationship between users and conversations
-- `messages` table: Message content, type (text/image/file), file metadata, delivery status
+- `messages` table: Message content, type (text/image/file), file metadata, delivery status, forwarding attribution, expiration timestamp
 - `sessions` table: Required for Replit Auth session persistence
+
+**New Schema Fields (November 2025):**
+- `conversations.disappearingMessagesTimer`: bigint (milliseconds, 0=off) - Auto-expiry timer for new messages
+- `messages.forwardedFrom`: varchar (references users.id) - Original sender ID for forwarded messages
+- `messages.expiresAt`: timestamp - When message should be automatically deleted
 
 **Storage Patterns**
 - Repository pattern via `IStorage` interface and `DatabaseStorage` implementation
