@@ -8,6 +8,11 @@ export class OTPService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
+    // Check if SMTP is configured
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+      console.error('SMTP credentials not configured. Please set SMTP_USER and SMTP_PASSWORD environment variables.');
+    }
+
     this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587'),
@@ -25,6 +30,11 @@ export class OTPService {
 
   async sendOTP(email: string): Promise<{ success: boolean; expiresIn: number }> {
     try {
+      // Check if SMTP is configured
+      if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+        throw new Error('SMTP not configured. Please contact the administrator.');
+      }
+
       const otp = this.generateOTP();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -86,9 +96,23 @@ export class OTPService {
       await this.transporter.sendMail(mailOptions);
 
       return { success: true, expiresIn: 600 };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending OTP:', error);
-      throw new Error('Failed to send OTP');
+      
+      // Provide more specific error messages
+      if (error.message?.includes('SMTP not configured')) {
+        throw error; // Re-throw with the specific message
+      }
+      
+      // Common SMTP errors
+      if (error.code === 'EAUTH') {
+        throw new Error('Email authentication failed. Please check SMTP credentials.');
+      }
+      if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+        throw new Error('Unable to connect to email server. Please try again later.');
+      }
+      
+      throw new Error('Failed to send OTP email. Please try again.');
     }
   }
 
