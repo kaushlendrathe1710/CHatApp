@@ -2,12 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated, getAuthenticatedUserId } from "./auth";
-import { otpService } from "./otp-service";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
-import { insertConversationSchema, insertMessageSchema, insertUserSchema } from "@shared/schema";
-import { z } from "zod";
+import { insertConversationSchema, insertMessageSchema } from "@shared/schema";
 
 // WebSocket client tracking
 const wsClients = new Map<string, Set<WebSocket>>();
@@ -26,172 +24,17 @@ export function broadcastToConversation(conversationId: string, message: any) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
-  setupAuth(app);
+  await setupAuth(app);
 
-  // Authentication routes
-  app.post('/api/auth/send-otp', async (req, res) => {
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const { email } = req.body;
-      
-      if (!email || !z.string().email().safeParse(email).success) {
-        return res.status(400).json({ message: "Valid email is required" });
-      }
-
-      const otp = otpService.generateOTP();
-      const hashedOtp = await otpService.hashOTP(otp);
-      const expiresAt = otpService.getOTPExpiry();
-
-      await storage.createOTP({
-        email: email.toLowerCase(),
-        hashedOtp,
-        expiresAt,
-      });
-
-      const emailSent = await otpService.sendOTPEmail(email, otp);
-      
-      if (!emailSent) {
-        return res.status(500).json({ message: "Failed to send OTP email. Please check SMTP configuration." });
-      }
-
-      res.json({ success: true, message: "OTP sent to your email" });
-    } catch (error) {
-      console.error("Error sending OTP:", error);
-      res.status(500).json({ message: "Failed to send OTP" });
-    }
-  });
-
-  app.post('/api/auth/verify-otp', async (req, res) => {
-    try {
-      const { email, otp } = req.body;
-
-      if (!email || !otp) {
-        return res.status(400).json({ message: "Email and OTP are required" });
-      }
-
-      const storedOtp = await storage.getOTPByEmail(email.toLowerCase());
-
-      if (!storedOtp) {
-        return res.status(401).json({ message: "Invalid or expired OTP" });
-      }
-
-      if (otpService.isOTPExpired(storedOtp.expiresAt)) {
-        await storage.deleteOTP(email.toLowerCase());
-        return res.status(401).json({ message: "OTP has expired" });
-      }
-
-      if (otpService.hasExceededMaxAttempts(storedOtp.attempts)) {
-        await storage.deleteOTP(email.toLowerCase());
-        return res.status(401).json({ message: "Maximum OTP attempts exceeded. Please request a new code." });
-      }
-
-      const isValid = await otpService.compareOTP(otp, storedOtp.hashedOtp);
-
-      if (!isValid) {
-        await storage.incrementOTPAttempts(email.toLowerCase());
-        const remainingAttempts = 3 - (storedOtp.attempts + 1);
-        return res.status(401).json({ 
-          message: "Invalid OTP", 
-          attemptsRemaining: Math.max(0, remainingAttempts)
-        });
-      }
-
-      await storage.deleteOTP(email.toLowerCase());
-      const user = await storage.getUserByEmail(email.toLowerCase());
-
-      if (user) {
-        req.session.userId = user.id;
-        delete req.session.verifiedEmail;
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err) => err ? reject(err) : resolve());
-        });
-        return res.json({ success: true, needsRegistration: false, user });
-      }
-
-      req.session.verifiedEmail = email.toLowerCase();
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => err ? reject(err) : resolve());
-      });
-
-      res.json({ success: true, needsRegistration: true, email: email.toLowerCase() });
-    } catch (error) {
-      console.error("Error verifying OTP:", error);
-      res.status(500).json({ message: "Failed to verify OTP" });
-    }
-  });
-
-  app.post('/api/auth/register', async (req, res) => {
-    try {
-      const { email, fullName, username, mobile } = req.body;
-
-      if (!email || !fullName || !username) {
-        return res.status(400).json({ message: "Email, full name, and username are required" });
-      }
-
-      if (!req.session.verifiedEmail || req.session.verifiedEmail !== email.toLowerCase()) {
-        return res.status(403).json({ message: "Email not verified. Please complete OTP verification first." });
-      }
-
-      const nameParts = fullName.trim().split(/\s+/);
-      const firstName = nameParts[0];
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined;
-
-      const existingUser = await storage.getUserByEmail(email.toLowerCase());
-      if (existingUser) {
-        return res.status(409).json({ message: "User already exists" });
-      }
-
-      const existingUsername = await storage.getUserByUsername(username.toLowerCase());
-      if (existingUsername) {
-        return res.status(409).json({ message: "Username already taken" });
-      }
-
-      const user = await storage.createUser({
-        email: email.toLowerCase(),
-        firstName,
-        lastName,
-        username: username.toLowerCase(),
-        mobile,
-      });
-
-      req.session.userId = user.id;
-      delete req.session.verifiedEmail;
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => err ? reject(err) : resolve());
-      });
-
-      res.json({ success: true, user });
-    } catch (error) {
-      console.error("Error registering user:", error);
-      res.status(500).json({ message: "Failed to register user" });
-    }
-  });
-
-  app.get('/api/auth/user', isAuthenticated, async (req, res) => {
-    try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
-    }
-  });
-
-  app.post('/api/auth/logout', isAuthenticated, async (req, res) => {
-    try {
-      req.session.destroy((err) => {
-        if (err) {
-          console.error("Error destroying session:", err);
-          return res.status(500).json({ message: "Failed to logout" });
-        }
-        res.json({ success: true, message: "Logged out successfully" });
-      });
-    } catch (error) {
-      console.error("Error logging out:", error);
-      res.status(500).json({ message: "Failed to logout" });
     }
   });
 
@@ -209,7 +52,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user conversations
   app.get('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const conversations = await storage.getUserConversations(userId);
       res.json(conversations);
     } catch (error) {
@@ -221,7 +64,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create conversation
   app.post('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const { userIds, isGroup, name } = req.body;
 
       if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
@@ -264,7 +107,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/messages/:conversationId', isAuthenticated, async (req: any, res) => {
     try {
       const { conversationId } = req.params;
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       
       // Mark messages as read
       await storage.updateConversationReadStatus(conversationId, userId);
@@ -294,7 +137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Send a message
   app.post('/api/messages', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const { conversationId, content, type, fileUrl, fileName, fileSize, replyToId } = req.body;
 
       if (!conversationId) {
@@ -370,7 +213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add reaction to message
   app.post('/api/messages/:messageId/reactions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const { messageId } = req.params;
       const { emoji, conversationId } = req.body;
 
@@ -402,7 +245,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Remove reaction from message
   app.delete('/api/messages/:messageId/reactions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const { messageId } = req.params;
 
       await storage.removeReaction(messageId, userId);
@@ -417,7 +260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Forward message to other conversations
   app.post('/api/messages/:messageId/forward', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const { messageId } = req.params;
       const { conversationIds } = req.body;
 
@@ -472,7 +315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create broadcast channel
   app.post('/api/broadcast/create', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const { name, description } = req.body;
 
       if (!name) {
@@ -490,7 +333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subscribe to broadcast channel
   app.post('/api/broadcast/:channelId/subscribe', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const { channelId } = req.params;
 
       await storage.subscribeToBroadcast(channelId, userId);
@@ -504,7 +347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Unsubscribe from broadcast channel
   app.post('/api/broadcast/:channelId/unsubscribe', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const { channelId } = req.params;
 
       await storage.unsubscribeFromBroadcast(channelId, userId);
@@ -520,7 +363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Store encryption public key
   app.post('/api/encryption/keys', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuthenticatedUserId(req);
+      const userId = req.user.claims.sub;
       const { conversationId, publicKey } = req.body;
 
       if (!conversationId || !publicKey) {

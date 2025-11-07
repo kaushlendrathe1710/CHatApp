@@ -5,10 +5,8 @@ import {
   messages,
   messageReactions,
   encryptionKeys,
-  otps,
   type User,
   type UpsertUser,
-  type InsertUser,
   type Conversation,
   type InsertConversation,
   type ConversationParticipant,
@@ -19,8 +17,6 @@ import {
   type InsertMessageReaction,
   type EncryptionKey,
   type InsertEncryptionKey,
-  type Otp,
-  type InsertOtp,
   type ConversationWithDetails,
   type MessageWithSender,
 } from "@shared/schema";
@@ -30,18 +26,9 @@ import { eq, and, inArray, sql, desc } from "drizzle-orm";
 export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
   updateUserLastSeen(userId: string): Promise<void>;
-  
-  // OTP operations
-  createOTP(otp: InsertOtp): Promise<Otp>;
-  getOTPByEmail(email: string): Promise<Otp | undefined>;
-  deleteOTP(email: string): Promise<void>;
-  incrementOTPAttempts(email: string): Promise<void>;
   
   // Conversation operations
   getConversation(id: string): Promise<Conversation | undefined>;
@@ -111,55 +98,6 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({ lastSeen: new Date() })
       .where(eq(users.id, userId));
-  }
-
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user;
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
-  }
-
-  async createUser(userData: InsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .returning();
-    return user;
-  }
-
-  // OTP operations
-  async createOTP(otpData: InsertOtp): Promise<Otp> {
-    await this.deleteOTP(otpData.email);
-    const [otp] = await db
-      .insert(otps)
-      .values(otpData)
-      .returning();
-    return otp;
-  }
-
-  async getOTPByEmail(email: string): Promise<Otp | undefined> {
-    const [otp] = await db
-      .select()
-      .from(otps)
-      .where(eq(otps.email, email))
-      .orderBy(desc(otps.createdAt))
-      .limit(1);
-    return otp;
-  }
-
-  async deleteOTP(email: string): Promise<void> {
-    await db.delete(otps).where(eq(otps.email, email));
-  }
-
-  async incrementOTPAttempts(email: string): Promise<void> {
-    await db
-      .update(otps)
-      .set({ attempts: sql`${otps.attempts} + 1` })
-      .where(eq(otps.email, email));
   }
 
   // Conversation operations
