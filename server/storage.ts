@@ -6,6 +6,7 @@ import {
   messageReactions,
   encryptionKeys,
   userPhotos,
+  userVideos,
   mediaLikes,
   mediaComments,
   type User,
@@ -22,6 +23,8 @@ import {
   type InsertEncryptionKey,
   type UserPhoto,
   type InsertUserPhoto,
+  type UserVideo,
+  type InsertUserVideo,
   type MediaLike,
   type InsertMediaLike,
   type MediaComment,
@@ -820,6 +823,79 @@ export class DatabaseStorage implements IStorage {
       .where(eq(userPhotos.id, photoId));
   }
 
+  // Video operations
+  async createVideo(videoData: InsertUserVideo): Promise<UserVideo> {
+    const [video] = await db
+      .insert(userVideos)
+      .values(videoData)
+      .returning();
+    return video;
+  }
+
+  async getUserVideos(userId: string): Promise<UserVideo[]> {
+    const videos = await db
+      .select()
+      .from(userVideos)
+      .where(eq(userVideos.userId, userId))
+      .orderBy(desc(userVideos.createdAt));
+    return videos;
+  }
+
+  async getVideo(videoId: string): Promise<UserVideo | undefined> {
+    const [video] = await db
+      .select()
+      .from(userVideos)
+      .where(eq(userVideos.id, videoId));
+    return video;
+  }
+
+  async deleteVideo(videoId: string, objectStorageService?: any): Promise<void> {
+    const video = await this.getVideo(videoId);
+    
+    if (!video) {
+      return;
+    }
+    
+    try {
+      // Cascade delete likes and comments for this video
+      await db.delete(mediaLikes).where(
+        and(
+          eq(mediaLikes.mediaType, 'video'),
+          eq(mediaLikes.mediaId, videoId)
+        )
+      );
+      
+      await db.delete(mediaComments).where(
+        and(
+          eq(mediaComments.mediaType, 'video'),
+          eq(mediaComments.mediaId, videoId)
+        )
+      );
+      
+      // Delete the GCS object if objectKey exists
+      if (video.objectKey && objectStorageService) {
+        try {
+          await objectStorageService.deleteObject(video.objectKey);
+        } catch (error) {
+          console.error("Error deleting GCS video object:", error);
+        }
+      }
+      
+      // Delete the video record
+      await db.delete(userVideos).where(eq(userVideos.id, videoId));
+    } catch (error) {
+      console.error("Error in deleteVideo:", error);
+      throw error;
+    }
+  }
+
+  async incrementVideoViewCount(videoId: string): Promise<void> {
+    await db
+      .update(userVideos)
+      .set({ viewCount: sql`${userVideos.viewCount} + 1` })
+      .where(eq(userVideos.id, videoId));
+  }
+
   // Media like operations
   async likeMedia(likeData: InsertMediaLike): Promise<MediaLike> {
     const result = await db
@@ -829,11 +905,18 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     // Only update like count if a row was actually inserted
-    if (result.length > 0 && likeData.mediaType === 'photo') {
-      await db
-        .update(userPhotos)
-        .set({ likeCount: sql`${userPhotos.likeCount} + 1` })
-        .where(eq(userPhotos.id, likeData.mediaId));
+    if (result.length > 0) {
+      if (likeData.mediaType === 'photo') {
+        await db
+          .update(userPhotos)
+          .set({ likeCount: sql`${userPhotos.likeCount} + 1` })
+          .where(eq(userPhotos.id, likeData.mediaId));
+      } else if (likeData.mediaType === 'video') {
+        await db
+          .update(userVideos)
+          .set({ likeCount: sql`${userVideos.likeCount} + 1` })
+          .where(eq(userVideos.id, likeData.mediaId));
+      }
     }
     
     return result[0];
@@ -852,11 +935,18 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     // Only update like count if a row was actually deleted
-    if (result.length > 0 && mediaType === 'photo') {
-      await db
-        .update(userPhotos)
-        .set({ likeCount: sql`${userPhotos.likeCount} - 1` })
-        .where(eq(userPhotos.id, mediaId));
+    if (result.length > 0) {
+      if (mediaType === 'photo') {
+        await db
+          .update(userPhotos)
+          .set({ likeCount: sql`${userPhotos.likeCount} - 1` })
+          .where(eq(userPhotos.id, mediaId));
+      } else if (mediaType === 'video') {
+        await db
+          .update(userVideos)
+          .set({ likeCount: sql`${userVideos.likeCount} - 1` })
+          .where(eq(userVideos.id, mediaId));
+      }
     }
   }
 

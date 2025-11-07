@@ -231,6 +231,36 @@ export const insertUserPhotoSchema = createInsertSchema(userPhotos).omit({
 export type InsertUserPhoto = z.infer<typeof insertUserPhotoSchema>;
 export type UserPhoto = typeof userPhotos.$inferSelect;
 
+// User Videos table (20-second clips)
+export const userVideos = pgTable("user_videos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  videoUrl: varchar("video_url").notNull(),
+  thumbnailUrl: varchar("thumbnail_url"),
+  objectKey: varchar("object_key"), // GCS object key for lifecycle management
+  caption: text("caption"),
+  duration: integer("duration"), // Duration in seconds
+  viewCount: integer("view_count").default(0),
+  likeCount: integer("like_count").default(0),
+  commentCount: integer("comment_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_user_videos_user").on(table.userId),
+  index("idx_user_videos_created").on(table.createdAt),
+  index("idx_user_videos_object_key").on(table.objectKey),
+]);
+
+export const insertUserVideoSchema = createInsertSchema(userVideos).omit({
+  id: true,
+  createdAt: true,
+  viewCount: true,
+  likeCount: true,
+  commentCount: true,
+});
+
+export type InsertUserVideo = z.infer<typeof insertUserVideoSchema>;
+export type UserVideo = typeof userVideos.$inferSelect;
+
 // Media Likes table (for photos and videos)
 export const mediaLikes = pgTable("media_likes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
