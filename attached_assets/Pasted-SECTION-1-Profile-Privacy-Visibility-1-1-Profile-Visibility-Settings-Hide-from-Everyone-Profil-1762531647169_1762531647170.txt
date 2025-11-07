@@ -1,0 +1,497 @@
+SECTION 1: Profile Privacy & Visibility
+1.1 Profile Visibility Settings
+Hide from Everyone
+Profile invisible in all discovery features
+Can still chat with existing connections
+Manual opt-in to show profile
+Hide from All Except Past Chats
+Only visible to users you've messaged before
+Maintains existing relationships
+No new discovery
+Show to Everyone (Default)
+Fully discoverable
+Appears in all search/discovery features
+Maximum visibility
+Additional Privacy Controls:
+
+Location Privacy: Exact, City, Country, Hidden
+Age Display: Exact, Range, Hidden
+Last Seen: Everyone, Connections, Hidden
+Online Status: Show/Hide
+Media Visibility: Public, Connections only, Hidden
+1.2 Who Can See What
+Profile photo visibility control
+Bio/About visibility control
+Interest tags visibility
+Media gallery visibility (photos/videos)
+Activity status visibility
+Implementation:
+
+// user_privacy table
+{
+  profileVisibility: 'everyone' | 'past_chats' | 'hidden',
+  locationPrivacy: 'exact' | 'city' | 'country' | 'hidden',
+  mediaVisibility: 'public' | 'connections' | 'hidden',
+  // ... more settings
+}
+
+SECTION 2: Media Sharing System
+2.1 Photo Gallery
+Upload Features:
+
+Multiple photo upload (5-10 images)
+Drag & drop interface
+Image cropping/editing before upload
+Set primary/profile photo
+Add captions to each photo
+Tag location where photo was taken
+Tag interests/activities in photo
+Display:
+
+Grid view on profile
+Carousel/lightbox for viewing
+Pinch to zoom
+Swipe navigation
+Show upload date
+Show view count
+Engagement:
+
+Like individual photos
+Comment on photos (threaded comments)
+Photo view counter
+Share photo to chat
+Report inappropriate photo
+2.2 Video Clips (20 seconds max)
+Upload Features:
+
+Video recording directly in app OR upload
+20-second maximum length
+Auto-trim if longer
+Add caption/description
+Tag with mood or activity
+Thumbnail auto-generation
+Display:
+
+Video feed/grid on profile
+Auto-play on scroll (muted) OR click to play
+Playback controls (play/pause, volume, fullscreen)
+Show duration badge
+View count display
+Engagement:
+
+Like videos
+Comment on videos
+View count tracking
+Share to chat
+Report inappropriate content
+2.3 Media Feed/Gallery Page
+Combined photo + video feed
+Filter by: Photos only, Videos only, All media
+Sort by: Recent, Most liked, Most viewed
+Infinite scroll
+Quick action buttons on each media item
+Implementation:
+
+// Tables needed:
+- user_photos (id, userId, url, caption, location, uploadDate, viewCount, likesCount)
+- user_videos (id, userId, url, thumbnailUrl, caption, duration, uploadDate, viewCount, likesCount)
+- media_likes (id, mediaId, mediaType, userId, createdAt)
+- media_comments (id, mediaId, mediaType, userId, comment, createdAt)
+
+SECTION 3: Granular Interaction Permissions
+3.1 Permission System Architecture
+User can set separate rules for:
+
+Who can LIKE my photos/videos
+Who can COMMENT on my content
+Who can MESSAGE me
+Who can VIEW my full profile
+Who can VIEW my media gallery
+3.2 Permission Options (Mix & Match)
+Match-based Permissions:
+
+✅ Anyone (0% match required)
+✅ Match ≥ 25%
+✅ Match ≥ 50%
+✅ Match ≥ 75%
+✅ Match = 100% (perfect matches only)
+Location-based Permissions:
+
+✅ Same City only
+✅ Same Country only
+✅ Within X km (5, 10, 25, 50, 100)
+✅ Any Location
+Combined Permissions (AND logic):
+
+Match ≥ 75% AND Same Country
+Match ≥ 50% AND Within 50km
+Match ≥ 25% AND Same City
+Other Filters:
+
+✅ Verified users only
+✅ Premium members only
+✅ Age range (18-25, 26-35, etc.)
+✅ Gender-specific
+✅ Mutual connections only
+3.3 Permission Presets (Quick Setup)
+Open: Anyone can interact
+Selective: ≥50% match OR same city
+Exclusive: ≥75% match AND same country
+Private: Only verified users with ≥75% match
+Custom: User defines all criteria
+3.4 Permission UI
+Settings Page with Toggles:
+
+WHO CAN LIKE MY PHOTOS?
+◉ Anyone
+○ Match ≥ 50%
+○ Match ≥ 75%
+○ Same location only
+○ Custom rules ▼
+  
+  [Custom Rules Panel]
+  Match Score: [Slider 0-100%] ≥ 60%
+  Location: [Dropdown: Any / Same City / Same Country]
+  Age Range: [18] - [40]
+  ☑ Verified users only
+  ☐ Premium members only
+  
+  [Save Rules]
+
+Real-time Permission Check:
+
+async function canUserInteract(
+  targetUserId: string,
+  currentUserId: string,
+  interactionType: 'like' | 'comment' | 'message' | 'view_profile'
+): Promise<boolean> {
+  // Get target user's permissions for this interaction type
+  const permissions = await getPermissions(targetUserId, interactionType);
+  
+  // Check match score
+  if (permissions.minMatchScore) {
+    const matchScore = await getMatchScore(currentUserId, targetUserId);
+    if (matchScore < permissions.minMatchScore) return false;
+  }
+  
+  // Check location
+  if (permissions.locationRule === 'same_city') {
+    const sameCity = await checkSameCity(currentUserId, targetUserId);
+    if (!sameCity) return false;
+  }
+  
+  // Check other criteria...
+  
+  return true; // Permission granted
+}
+
+Implementation:
+
+// user_interaction_permissions table
+{
+  userId: string,
+  canLike: {
+    minMatchScore: 50,
+    locationRule: 'same_country',
+    verifiedOnly: true,
+    ageRange: [25, 40]
+  },
+  canComment: {
+    minMatchScore: 75,
+    locationRule: 'any',
+    verifiedOnly: false
+  },
+  canMessage: {
+    minMatchScore: 60,
+    locationRule: 'same_city'
+  }
+}
+
+SECTION 4: Social Feed & Discovery
+4.1 Explore Feed
+For You - Algorithm-based recommendations
+Nearby - Users within radius
+New Members - Recent joiners
+Top Matches - Highest compatibility
+Trending - Most liked/viewed content this week
+4.2 Media Feed
+Combined feed of photos/videos from discoverable users
+Filter by interests, mood, location
+Like/comment if permissions allow
+"View Profile" button on each post
+Infinite scroll with lazy loading
+4.3 Stories Feature (Optional)
+24-hour temporary photo/video stories
+View who saw your story
+React with quick emojis
+Swipe to next user's story
+SECTION 5: Enhanced Matchmaking
+5.1 Compatibility Algorithm (Expanded)
+Location Matching (20 points)
+
+Same city: 20 pts
+Within 50km: 15 pts
+Same country: 10 pts
+Different continent: 5 pts
+Age Compatibility (15 points)
+
+Within preferred range: 15 pts
+±2 years outside: 10 pts
+±5 years outside: 5 pts
+Interest Overlap (25 points)
+
+Shared interests percentage × 25
+Example: 60% overlap = 15 pts
+Education Match (10 points)
+
+Same level: 10 pts
+Similar field: +5 bonus
+Lifestyle Compatibility (15 points)
+
+Smoking/drinking match: 10 pts
+Dietary preferences: 5 pts
+Values Alignment (10 points)
+
+Religion/beliefs: 5 pts
+Family goals: 5 pts
+Activity Patterns (5 points)
+
+Online at similar times: 5 pts
+Activity level match: 3 pts
+Bonus Factors
+
+Mutual likes: ×1.2
+Both verified: ×1.1
+Complete profiles: ×1.05
+SECTION 6: Engagement & Notifications
+6.1 Notification System
+Real-time Notifications for:
+
+Someone liked your photo/video
+Someone commented on your content
+Someone viewed your profile (if enabled)
+Someone matched with you (≥X%)
+Daily match suggestions ready
+Someone sent you a message request
+Notification Preferences:
+
+Push notifications (mobile)
+In-app notifications
+Email digests (daily/weekly)
+Granular control per notification type
+6.2 Activity Tracking
+Who viewed your profile (name, time, match%)
+Who liked your photos (with photo preview)
+Who commented (with comment preview)
+Mutual visitors (you both viewed each other)
+6.3 Engagement Analytics (User Dashboard)
+Profile views: Last 7 days, 30 days
+Photo/video performance (views, likes, comments)
+Match success rate
+Response rate on messages
+Most popular content
+SECTION 7: Content Moderation & Safety
+7.1 Automated Moderation
+AI Image Moderation
+Detect nudity/inappropriate content
+Flag violent/disturbing images
+Auto-blur questionable content pending review
+Text Moderation
+Profanity filter in comments/bios
+Hate speech detection
+Spam prevention
+7.2 User Reporting
+Report Options:
+
+Inappropriate photo/video
+Fake profile
+Harassment
+Spam
+Underage user
+Other (with description)
+Report Flow:
+
+User reports content
+Auto-flag + notify moderators
+Content hidden pending review
+Moderator decision (approve/remove)
+User notified of outcome
+7.3 Safety Features
+Photo verification (selfie match)
+ID verification (optional premium)
+Trusted user badges
+Warning system (strike 1, 2, 3, ban)
+Appeal process for bans
+SECTION 8: Technical Architecture
+8.1 Database Schema
+// Extended Users Table
+users {
+  id, email, username, fullName, age, gender,
+  city, country, latitude, longitude,
+  bio, occupation, education,
+  profileVisibility: 'everyone' | 'past_chats' | 'hidden',
+  isVerified, isPremium,
+  createdAt, lastActiveAt
+}
+// User Privacy & Permissions
+user_privacy {
+  userId,
+  profileVisibility,
+  locationPrivacy,
+  mediaVisibility,
+  lastSeenVisibility
+}
+user_interaction_permissions {
+  userId,
+  canLikeRules: JSON, // {minMatch, location, verified}
+  canCommentRules: JSON,
+  canMessageRules: JSON,
+  canViewProfileRules: JSON
+}
+// Media Tables
+user_photos {
+  id, userId, url, thumbnailUrl,
+  caption, location, tags[],
+  uploadedAt, viewCount, likesCount, commentsCount
+}
+user_videos {
+  id, userId, url, thumbnailUrl,
+  caption, duration, tags[],
+  uploadedAt, viewCount, likesCount, commentsCount
+}
+// Engagement Tables
+media_likes {
+  id, mediaId, mediaType: 'photo' | 'video',
+  userId, createdAt
+}
+media_comments {
+  id, mediaId, mediaType,
+  userId, comment, parentCommentId (for replies),
+  createdAt
+}
+profile_views {
+  id, viewedUserId, viewerUserId,
+  viewedAt
+}
+// Matchmaking
+user_matches {
+  userId1, userId2,
+  compatibilityScore, breakdown: JSON,
+  lastCalculated
+}
+// Existing tables (conversations, messages, etc.)
+
+8.2 API Endpoints
+// Privacy & Permissions
+PUT /api/users/privacy-settings
+PUT /api/users/interaction-permissions
+GET /api/users/check-permission/:userId/:action
+// Media Management
+POST /api/media/photos/upload
+POST /api/media/videos/upload
+GET /api/media/photos/:userId
+GET /api/media/videos/:userId
+DELETE /api/media/:type/:id
+PUT /api/media/:type/:id (edit caption)
+// Media Engagement
+POST /api/media/:type/:id/like
+DELETE /api/media/:type/:id/unlike
+POST /api/media/:type/:id/comment
+GET /api/media/:type/:id/comments
+DELETE /api/comments/:id
+// Discovery & Feed
+GET /api/discover/feed (photos/videos from all users)
+GET /api/discover/users (with permission filtering)
+GET /api/discover/matches?minScore=75
+// Analytics
+GET /api/analytics/profile-views
+GET /api/analytics/media-performance
+GET /api/analytics/who-liked-me
+// Moderation
+POST /api/report/media/:id
+POST /api/report/user/:id
+GET /api/admin/pending-reports (admin only)
+
+8.3 Permission Middleware
+// Check before any interaction
+async function checkInteractionPermission(req, res, next) {
+  const { targetUserId } = req.params;
+  const currentUserId = req.user.id;
+  const action = req.interactionType; // 'like', 'comment', etc.
+  
+  const canInteract = await canUserInteract(
+    targetUserId,
+    currentUserId,
+    action
+  );
+  
+  if (!canInteract) {
+    return res.status(403).json({
+      message: "You don't meet the criteria to perform this action",
+      reason: "match_score_too_low" // or other reason
+    });
+  }
+  
+  next();
+}
+
+8.4 Real-time Features
+WebSocket notifications for likes/comments
+Live update of view counts
+Online status indicators
+Typing indicators in comments
+8.5 Performance Optimization
+CDN for media files (photos/videos)
+Redis caching for match scores, permissions
+Database indexing on userId, createdAt, viewCount
+Lazy loading for infinite scroll feeds
+Image optimization (compress, resize, WebP format)
+Video transcoding (multiple quality levels)
+SECTION 9: Premium Features (Optional Monetization)
+Free Users:
+
+5 photos, 2 videos
+10 likes per day on media
+See blurred "Who viewed me"
+Basic filters only
+Premium Users:
+
+Unlimited photos/videos
+Unlimited likes
+See all profile viewers
+Advanced filters & permissions
+Boost profile visibility
+Incognito browsing
+Priority in discovery feeds
+Ad-free experience
+Video stories (24hr)
+SECTION 10: Implementation Phases
+Phase 1: Privacy Controls (Week 1)
+Three-level visibility system
+Privacy settings UI
+Middleware for visibility checks
+Phase 2: Photo Gallery (Week 2)
+Multi-photo upload
+Gallery UI with carousel
+Photo likes & comments
+Permission checks before interaction
+Phase 3: Video Clips (Week 3)
+Video upload (20 sec limit)
+Video player UI
+Video likes & comments
+Thumbnail generation
+Phase 4: Granular Permissions (Week 4)
+Permission settings UI
+Match score requirements
+Location-based filtering
+Real-time permission validation
+Phase 5: Media Feed (Week 5)
+Combined photo/video feed
+Discovery algorithms
+Infinite scroll
+Filter options
+Phase 6: Analytics & Moderation (Week 6)
+User analytics dashboard
+Content moderation system
+Reporting mechanism
+Safety features
