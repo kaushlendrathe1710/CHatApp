@@ -5,6 +5,7 @@ import connectPg from "connect-pg-simple";
 declare module 'express-session' {
   interface SessionData {
     userId: string;
+    verifiedEmail?: string;
   }
 }
 

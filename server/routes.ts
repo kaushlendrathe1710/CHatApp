@@ -100,11 +100,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (user) {
         req.session.userId = user.id;
+        delete req.session.verifiedEmail;
         await new Promise<void>((resolve, reject) => {
           req.session.save((err) => err ? reject(err) : resolve());
         });
         return res.json({ success: true, needsRegistration: false, user });
       }
+
+      req.session.verifiedEmail = email.toLowerCase();
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => err ? reject(err) : resolve());
+      });
 
       res.json({ success: true, needsRegistration: true, email: email.toLowerCase() });
     } catch (error) {
@@ -119,6 +125,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!email || !fullName || !username) {
         return res.status(400).json({ message: "Email, full name, and username are required" });
+      }
+
+      if (!req.session.verifiedEmail || req.session.verifiedEmail !== email.toLowerCase()) {
+        return res.status(403).json({ message: "Email not verified. Please complete OTP verification first." });
       }
 
       const nameParts = fullName.trim().split(/\s+/);
@@ -144,6 +154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       req.session.userId = user.id;
+      delete req.session.verifiedEmail;
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => err ? reject(err) : resolve());
       });
