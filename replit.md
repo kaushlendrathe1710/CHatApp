@@ -6,6 +6,16 @@ A modern real-time messaging platform inspired by WhatsApp and Telegram, built w
 
 ## Recent Changes (November 2025)
 
+**Authentication System Replacement (November 7, 2025):**
+- ✅ Replaced Replit Auth with passwordless email/OTP authentication
+- ✅ Implemented SMTP-based OTP email delivery using nodemailer
+- ✅ Added security measures: OTP hashing (bcrypt), rate limiting (3 req/15min for OTP, 5 for verification), sameSite cookies
+- ✅ Created auth flow: Email → OTP verification → Registration (first-time users) → Dashboard
+- ✅ Database schema updates: Added username, mobileNumber, fullName, isRegistered to users; created otps table
+- ✅ Frontend pages: EmailLogin, OTPVerification, Registration with proper redirects
+- ✅ Session-based authentication with PostgreSQL session store (7-day expiry)
+- ✅ Auth endpoints: POST /api/auth/request-otp, POST /api/auth/verify-otp, POST /api/auth/register, GET /api/auth/user, POST /api/auth/logout
+
 **Completed MVP Features:**
 - ✅ Group chat creation with name and participant management
 - ✅ Message timestamps with date separators ("Today", "Yesterday", formatted dates)
@@ -125,11 +135,13 @@ Preferred communication style: Simple, everyday language.
 - Custom middleware for request logging and JSON body parsing with raw buffer preservation
 
 **Authentication & Session Management**
-- Replit Auth integration using OpenID Connect (OIDC)
-- Passport.js strategy for authentication flow
+- Passwordless email/OTP authentication using nodemailer for SMTP delivery
+- 6-digit OTP codes hashed with bcrypt before storage (60-character hashes)
+- OTP expiry: 10 minutes, automatically cleaned up
+- Rate limiting: 3 OTP requests per 15min per IP, 5 verification attempts per 15min per IP
 - PostgreSQL-backed session storage via `connect-pg-simple`
-- Session-based authentication with 7-day cookie expiry
-- Token refresh mechanism for maintaining authenticated sessions
+- Session-based authentication with 7-day cookie expiry, sameSite='lax' for CSRF protection
+- User flow: Email → OTP → Registration (first-time) → Dashboard
 
 **WebSocket Architecture**
 - WebSocket server running alongside Express on the same HTTP server
@@ -151,13 +163,14 @@ Preferred communication style: Simple, everyday language.
 - Database schema defined in `shared/schema.ts` for full-stack type sharing
 
 **Schema Design**
-- `users` table: Profile information, status, last seen timestamp
+- `users` table: Email (unique), username (unique), mobileNumber, fullName, profileImageUrl, status, lastSeen, isRegistered flag
 - `conversations` table: Supports direct (1-on-1), group chats, and broadcast channels via `isGroup` and `isBroadcast` flags, disappearing messages timer
 - `conversationParticipants` table: Many-to-many relationship between users and conversations with role-based permissions (admin/subscriber)
 - `messages` table: Message content, type (text/image/file), file metadata, delivery status, forwarding attribution, expiration timestamp, encryption flag
 - `messageReactions` table: Emoji reactions on messages
 - `encryptionKeys` table: Public RSA keys for end-to-end encryption (unique per conversation-user pair)
-- `sessions` table: Required for Replit Auth session persistence
+- `otps` table: Email, hashed OTP (bcrypt, varchar(255)), expiresAt timestamp, verified flag
+- `sessions` table: Required for session-based authentication (connect-pg-simple)
 
 **New Schema Fields & Tables (November 2025):**
 - `conversations.isBroadcast`: boolean - Distinguishes broadcast channels from regular conversations
@@ -193,10 +206,11 @@ Preferred communication style: Simple, everyday language.
 - WebSocket-based connections for serverless compatibility (`ws` package required)
 - Environment-based connection string configuration
 
-**Authentication Provider**
-- Replit OIDC provider for user authentication
-- User profile data including email, name, and profile image URL
-- Claims-based user identification via JWT tokens
+**SMTP Email Service**
+- Nodemailer for sending OTP emails
+- Supports Gmail, SendGrid, and other SMTP providers
+- Configuration via environment variables: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM_EMAIL
+- Secure 6-digit OTP generation using Math.random() with 100000-999999 range
 
 **Development Tools**
 - Replit-specific Vite plugins for development experience:
@@ -213,7 +227,7 @@ Preferred communication style: Simple, everyday language.
 - `emoji-picker-react` for emoji selection
 
 **API Endpoints Summary:**
-- Authentication: `/api/auth/login`, `/api/auth/user`, `/api/auth/logout`
+- Authentication: `/api/auth/request-otp`, `/api/auth/verify-otp`, `/api/auth/register`, `/api/auth/user`, `/api/auth/logout`
 - Users: `/api/users`
 - Conversations: `/api/conversations`, `/api/conversations/:id/settings`
 - Messages: `/api/messages/:conversationId`, `/api/messages`, `/api/messages/:id/forward`

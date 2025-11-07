@@ -31,8 +31,7 @@ export const users = pgTable("users", {
   email: varchar("email").unique().notNull(),
   username: varchar("username").unique(),
   mobileNumber: varchar("mobile_number"),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
+  fullName: varchar("full_name"),
   profileImageUrl: varchar("profile_image_url"),
   status: text("status").default("Available"),
   lastSeen: timestamp("last_seen").defaultNow(),
@@ -57,7 +56,7 @@ export type User = typeof users.$inferSelect;
 export const otps = pgTable("otps", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").notNull(),
-  otp: varchar("otp", { length: 6 }).notNull(),
+  otp: varchar("otp", { length: 255 }).notNull(), // Large enough for bcrypt hashes
   expiresAt: timestamp("expires_at").notNull(),
   verified: boolean("verified").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
