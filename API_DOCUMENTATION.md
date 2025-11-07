@@ -29,35 +29,151 @@ WebSocket: ws://your-app.replit.app/ws or wss://your-app.replit.app/ws
 
 ## Authentication
 
-### Login with Replit Auth
-**Endpoint:** `GET /api/auth/login`
+The application uses passwordless email/OTP authentication with session-based authentication.
 
-Redirects to Replit OAuth login page.
+### Authentication Flow
+1. User enters email → Receives 6-digit OTP via email
+2. User enters OTP → System verifies and creates/logs in user
+3. First-time users → Complete registration (full name, mobile, username)
+4. Returning users → Go directly to dashboard
 
-**Response:**
-- Redirects to Replit OAuth, then back to `/api/auth/callback`
-- Sets session cookie automatically
+### Request OTP
+**Endpoint:** `POST /api/auth/request-otp`
+
+Request a one-time password sent via email.
+
+**Rate Limiting:** 3 requests per 15 minutes per IP address
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Success Response:**
+```json
+{
+  "message": "OTP sent to your email"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request` - Invalid email format
+- `429 Too Many Requests` - Rate limit exceeded
+- `500 Internal Server Error` - Failed to send email
+
+### Verify OTP
+**Endpoint:** `POST /api/auth/verify-otp`
+
+Verify the OTP code and authenticate user.
+
+**Rate Limiting:** 5 requests per 15 minutes per IP address
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "otp": "123456"
+}
+```
+
+**Success Response:**
+```json
+{
+  "message": "OTP verified successfully",
+  "user": {
+    "id": "user-uuid",
+    "email": "user@example.com",
+    "username": null,
+    "fullName": null,
+    "mobileNumber": null,
+    "profileImageUrl": null,
+    "status": null,
+    "lastSeen": "2025-11-07T10:30:00Z",
+    "isRegistered": false
+  }
+}
+```
+
+**Notes:**
+- If `isRegistered` is `false`, user must complete registration
+- If `isRegistered` is `true`, user is fully authenticated
+- Sets session cookie (`connect.sid`) automatically
+
+**Error Responses:**
+- `400 Bad Request` - Missing email or OTP
+- `401 Unauthorized` - Invalid or expired OTP
+- `429 Too Many Requests` - Rate limit exceeded
+
+### Complete Registration
+**Endpoint:** `POST /api/auth/register`
+
+Complete user profile for first-time users (requires active session from OTP verification).
+
+**Authentication Required:** Yes (via session cookie)
+
+**Request Body:**
+```json
+{
+  "fullName": "John Doe",
+  "mobileNumber": "+1234567890",
+  "username": "johndoe"
+}
+```
+
+**Success Response:**
+```json
+{
+  "message": "Registration completed successfully",
+  "user": {
+    "id": "user-uuid",
+    "email": "user@example.com",
+    "username": "johndoe",
+    "fullName": "John Doe",
+    "mobileNumber": "+1234567890",
+    "profileImageUrl": null,
+    "status": null,
+    "lastSeen": "2025-11-07T10:30:00Z",
+    "isRegistered": true
+  }
+}
+```
+
+**Error Responses:**
+- `400 Bad Request` - Validation errors (missing fields, username taken)
+- `401 Unauthorized` - Not authenticated or user already registered
+- `409 Conflict` - Username already exists
+
+**Validation Rules:**
+- `fullName`: Required, 2-100 characters
+- `mobileNumber`: Required, 10-15 characters
+- `username`: Required, 3-30 characters, alphanumeric + underscores only, unique
 
 ### Get Current User
 **Endpoint:** `GET /api/auth/user`
 
 Get authenticated user information.
 
+**Authentication Required:** Yes (via session cookie)
+
 **Headers:**
 ```
 Cookie: connect.sid=<session-cookie>
 ```
 
-**Response:**
+**Success Response:**
 ```json
 {
   "id": "user-uuid",
   "email": "user@example.com",
-  "firstName": "John",
-  "lastName": "Doe",
+  "username": "johndoe",
+  "fullName": "John Doe",
+  "mobileNumber": "+1234567890",
   "profileImageUrl": "https://...",
   "status": "Available",
-  "lastSeen": "2025-11-04T10:30:00Z"
+  "lastSeen": "2025-11-07T10:30:00Z",
+  "isRegistered": true
 }
 ```
 
@@ -65,16 +181,32 @@ Cookie: connect.sid=<session-cookie>
 - `401 Unauthorized` - Not authenticated
 
 ### Logout
-**Endpoint:** `GET /api/auth/logout`
+**Endpoint:** `POST /api/auth/logout`
 
 Destroys session and logs out user.
 
-**Response:**
+**Authentication Required:** Yes (via session cookie)
+
+**Success Response:**
 ```json
 {
-  "message": "Logged out"
+  "message": "Logged out successfully"
 }
 ```
+
+**Notes:**
+- Session cookie is cleared automatically
+- User must authenticate again to access protected endpoints
+
+### Security Features
+- **OTP Hashing:** All OTPs are hashed with bcrypt before storage
+- **OTP Expiry:** OTPs expire after 10 minutes
+- **Rate Limiting:** 
+  - Request OTP: 3 requests per 15 minutes per IP
+  - Verify OTP: 5 requests per 15 minutes per IP
+- **Session Management:** 7-day session expiry with secure cookies
+- **CSRF Protection:** sameSite='lax' cookie setting
+- **Old OTP Invalidation:** Previous OTPs are automatically invalidated when requesting new ones
 
 ---
 
@@ -188,20 +320,28 @@ ws.send(JSON.stringify({
 
 Get list of all users for creating conversations.
 
+**Authentication Required:** Yes (via session cookie)
+
 **Response:**
 ```json
 [
   {
     "id": "user-uuid",
     "email": "user@example.com",
-    "firstName": "John",
-    "lastName": "Doe",
+    "username": "johndoe",
+    "fullName": "John Doe",
+    "mobileNumber": "+1234567890",
     "profileImageUrl": "https://...",
     "status": "Available",
-    "lastSeen": "2025-11-04T10:30:00Z"
+    "lastSeen": "2025-11-07T10:30:00Z",
+    "isRegistered": true
   }
 ]
 ```
+
+**Notes:**
+- Only returns fully registered users (`isRegistered: true`)
+- Useful for populating user selection in conversation creation
 
 ---
 
@@ -231,11 +371,13 @@ Get all conversations for the authenticated user with participants and last mess
         "user": {
           "id": "user-uuid",
           "email": "user@example.com",
-          "firstName": "John",
-          "lastName": "Doe",
+          "username": "johndoe",
+          "fullName": "John Doe",
+          "mobileNumber": "+1234567890",
           "profileImageUrl": "https://...",
           "status": "Available",
-          "lastSeen": "2025-11-04T10:30:00Z"
+          "lastSeen": "2025-11-07T10:30:00Z",
+          "isRegistered": true
         }
       }
     ],
@@ -342,8 +484,8 @@ Get all messages in a conversation.
     "sender": {
       "id": "user-uuid",
       "email": "user@example.com",
-      "firstName": "John",
-      "lastName": "Doe",
+      "username": "johndoe",
+      "fullName": "John Doe",
       "profileImageUrl": "https://..."
     },
     "replyToMessage": null,
@@ -357,8 +499,8 @@ Get all messages in a conversation.
         "createdAt": "2025-11-04T10:31:00Z",
         "user": {
           "id": "user-uuid",
-          "firstName": "John",
-          "lastName": "Doe"
+          "username": "johndoe",
+          "fullName": "John Doe"
         }
       }
     ]

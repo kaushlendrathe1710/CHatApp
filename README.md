@@ -118,9 +118,12 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 # Session Secret (generate a random string)
 SESSION_SECRET=your-secure-random-secret
 
-# Replit Auth (if using Replit)
-REPL_ID=your-repl-id
-ISSUER_URL=https://replit.com/oidc
+# SMTP Configuration (for OTP emails)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_FROM_EMAIL=your-email@gmail.com
 ```
 
 3. **Push Database Schema**
@@ -145,13 +148,15 @@ Create a `.env` file based on `.env.example`:
 | `NODE_ENV` | Environment (development/production) | No | `development` |
 | `DATABASE_URL` | PostgreSQL connection string | **Yes** | - |
 | `SESSION_SECRET` | Secret for session encryption | **Yes** | - |
-| `REPL_ID` | Replit app ID (for auth) | Yes* | - |
-| `ISSUER_URL` | OIDC issuer URL | Yes* | `https://replit.com/oidc` |
+| `SMTP_HOST` | SMTP server hostname | **Yes** | - |
+| `SMTP_PORT` | SMTP server port | **Yes** | `587` |
+| `SMTP_USER` | SMTP username | **Yes** | - |
+| `SMTP_PASSWORD` | SMTP password | **Yes** | - |
+| `SMTP_FROM_EMAIL` | From email address for OTPs | **Yes** | - |
+| `SMTP_SECURE` | Use TLS (true/false) | No | `false` |
 | `DEFAULT_OBJECT_STORAGE_BUCKET_ID` | Object storage bucket ID | No | Auto-configured |
 | `PUBLIC_OBJECT_SEARCH_PATHS` | Public object storage paths | No | `/public` |
 | `PRIVATE_OBJECT_DIR` | Private object storage directory | No | `.private` |
-
-*Required only when using Replit Auth
 
 ---
 
@@ -164,9 +169,11 @@ Complete API reference is available in [API_DOCUMENTATION.md](./API_DOCUMENTATIO
 **Base URL:** `http://localhost:5000` or your deployed URL
 
 #### Authentication
-- `GET /api/auth/login` - Login with Replit OAuth
+- `POST /api/auth/request-otp` - Request OTP via email
+- `POST /api/auth/verify-otp` - Verify OTP and authenticate
+- `POST /api/auth/register` - Complete registration (first-time users)
 - `GET /api/auth/user` - Get current user
-- `GET /api/auth/logout` - Logout
+- `POST /api/auth/logout` - Logout
 
 #### Conversations
 - `GET /api/conversations` - Get all conversations
@@ -211,8 +218,8 @@ See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for detailed request/response
     ┌────┴────┬──────────────┬─────────────┐
     │         │              │             │
 ┌───▼───┐ ┌──▼──┐  ┌────────▼───────┐ ┌──▼────┐
-│  DB   │ │ WS  │  │ Object Storage │ │ Auth  │
-│ (PG)  │ │     │  │   (GCS)        │ │(OIDC) │
+│  DB   │ │ WS  │  │ Object Storage │ │ SMTP  │
+│ (PG)  │ │     │  │   (GCS)        │ │ Email │
 └───────┘ └─────┘  └────────────────┘ └───────┘
 ```
 
@@ -260,11 +267,13 @@ Stores user profiles and status information.
 {
   id: string (UUID)
   email: string
-  firstName: string
-  lastName: string
+  username: string
+  fullName: string
+  mobileNumber: string
   profileImageUrl: string
   status: string
   lastSeen: timestamp
+  isRegistered: boolean
 }
 ```
 
@@ -575,20 +584,22 @@ CMD ["npm", "start"]
 - **PostgreSQL** - Database
 - **Neon** - Serverless PostgreSQL
 
-### DevOps
+### DevOps & Services
 - **Replit** - Hosting platform
 - **Google Cloud Storage** - File storage
-- **Replit Auth** - OAuth authentication
+- **SMTP** - Email delivery for OTP codes
 
 ---
 
 ## 🔒 Security Features
 
-- **Session-based authentication** with secure cookies
-- **OIDC integration** with Replit Auth
+- **Passwordless authentication** with email/OTP (no password storage)
+- **OTP hashing** with bcrypt before database storage
+- **Rate limiting** on auth endpoints (3 requests/15min for OTP, 5 for verification)
+- **Session-based authentication** with secure cookies (7-day expiry)
+- **CSRF protection** with sameSite='lax' cookies
 - **SQL injection protection** via Drizzle ORM
 - **XSS protection** with React's built-in escaping
-- **CSRF protection** (session-based)
 - **Secure file uploads** with signed URLs
 - **Environment variable protection**
 
