@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
+import Landing from "@/pages/Landing";
 import EmailLogin from "@/pages/EmailLogin";
 import OTPVerification from "@/pages/OTPVerification";
 import Registration from "@/pages/Registration";
@@ -25,17 +26,20 @@ function Router() {
 
   return (
     <Switch>
+      <Route path="/">
+        {isAuthenticated ? <Redirect to="/dashboard" /> : <Landing />}
+      </Route>
       <Route path="/login">
-        {isAuthenticated ? <Redirect to="/" /> : <EmailLogin />}
+        {isAuthenticated ? <Redirect to="/dashboard" /> : <EmailLogin />}
       </Route>
       <Route path="/verify-otp">
-        {isAuthenticated ? <Redirect to="/" /> : <OTPVerification />}
+        {isAuthenticated ? <Redirect to="/dashboard" /> : <OTPVerification />}
       </Route>
       <Route path="/register">
-        {!isAuthenticated ? <Redirect to="/login" /> : needsRegistration ? <Registration /> : <Redirect to="/" />}
+        {!isAuthenticated ? <Redirect to="/login" /> : needsRegistration ? <Registration /> : <Redirect to="/dashboard" />}
       </Route>
-      <Route path="/">
-        {!isAuthenticated ? <Redirect to="/login" /> : needsRegistration ? <Redirect to="/register" /> : <Home />}
+      <Route path="/dashboard">
+        {!isAuthenticated ? <Redirect to="/" /> : needsRegistration ? <Redirect to="/register" /> : <Home />}
       </Route>
       <Route component={NotFound} />
     </Switch>

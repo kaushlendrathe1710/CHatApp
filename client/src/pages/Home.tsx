@@ -529,7 +529,7 @@ export default function Home() {
                 try {
                   await apiRequest("POST", "/api/auth/logout");
                   queryClient.setQueryData(['/api/auth/user'], null);
-                  setLocation("/login");
+                  setLocation("/");
                 } catch (error) {
                   console.error("Logout error:", error);
                   toast({
