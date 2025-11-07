@@ -70,7 +70,19 @@ export class OTPService {
   }
 
   async sendOTPEmail(email: string, otp: string): Promise<boolean> {
+    const isDevelopment = process.env.NODE_ENV === 'development';
+
     if (!this.transporter) {
+      if (isDevelopment) {
+        console.log('\n=================================');
+        console.log('🔐 DEVELOPMENT MODE - OTP CODE');
+        console.log('=================================');
+        console.log(`Email: ${email}`);
+        console.log(`OTP Code: ${otp}`);
+        console.log(`Valid for: ${OTP_EXPIRY_MINUTES} minutes`);
+        console.log('=================================\n');
+        return true;
+      }
       console.error('Email transporter not initialized. Check SMTP configuration.');
       return false;
     }
@@ -144,6 +156,19 @@ If you didn't request this code, please ignore this email.
       return true;
     } catch (error) {
       console.error('Failed to send OTP email:', error);
+      
+      if (isDevelopment) {
+        console.log('\n=================================');
+        console.log('🔐 DEVELOPMENT MODE - OTP CODE');
+        console.log('(Email sending failed, using fallback)');
+        console.log('=================================');
+        console.log(`Email: ${email}`);
+        console.log(`OTP Code: ${otp}`);
+        console.log(`Valid for: ${OTP_EXPIRY_MINUTES} minutes`);
+        console.log('=================================\n');
+        return true;
+      }
+      
       return false;
     }
   }
