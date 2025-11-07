@@ -5,6 +5,9 @@ import {
   messages,
   messageReactions,
   encryptionKeys,
+  userPhotos,
+  mediaLikes,
+  mediaComments,
   type User,
   type UpsertUser,
   type Conversation,
@@ -17,6 +20,12 @@ import {
   type InsertMessageReaction,
   type EncryptionKey,
   type InsertEncryptionKey,
+  type UserPhoto,
+  type InsertUserPhoto,
+  type MediaLike,
+  type InsertMediaLike,
+  type MediaComment,
+  type InsertMediaComment,
   type ConversationWithDetails,
   type MessageWithSender,
 } from "@shared/schema";
@@ -74,6 +83,25 @@ export interface IStorage {
   updatePrivacySettings(userId: string, settings: Partial<Pick<User, 'profileVisibility' | 'locationPrivacy' | 'lastSeenVisibility' | 'onlineStatusVisibility'>>): Promise<User>;
   getDiscoverableUsers(currentUserId: string): Promise<User[]>;
   canViewProfile(viewerId: string, targetUserId: string): Promise<boolean>;
+  sanitizeUserData(targetUser: User, viewerId: string): Promise<User>;
+  
+  // Photo operations
+  createPhoto(photo: InsertUserPhoto): Promise<UserPhoto>;
+  getUserPhotos(userId: string): Promise<UserPhoto[]>;
+  getPhoto(photoId: string): Promise<UserPhoto | undefined>;
+  deletePhoto(photoId: string): Promise<void>;
+  incrementPhotoViewCount(photoId: string): Promise<void>;
+  
+  // Media like operations
+  likeMedia(like: InsertMediaLike): Promise<MediaLike>;
+  unlikeMedia(mediaType: string, mediaId: string, userId: string): Promise<void>;
+  getMediaLikes(mediaType: string, mediaId: string): Promise<MediaLike[]>;
+  hasUserLikedMedia(mediaType: string, mediaId: string, userId: string): Promise<boolean>;
+  
+  // Media comment operations
+  addMediaComment(comment: InsertMediaComment): Promise<MediaComment>;
+  getMediaComments(mediaType: string, mediaId: string): Promise<MediaComment[]>;
+  deleteMediaComment(commentId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -715,6 +743,202 @@ export class DatabaseStorage implements IStorage {
     }
     
     return sanitizedUser;
+  }
+
+  // Photo operations
+  async createPhoto(photoData: InsertUserPhoto): Promise<UserPhoto> {
+    const [photo] = await db
+      .insert(userPhotos)
+      .values(photoData)
+      .returning();
+    return photo;
+  }
+
+  async getUserPhotos(userId: string): Promise<UserPhoto[]> {
+    const photos = await db
+      .select()
+      .from(userPhotos)
+      .where(eq(userPhotos.userId, userId))
+      .orderBy(desc(userPhotos.createdAt));
+    return photos;
+  }
+
+  async getPhoto(photoId: string): Promise<UserPhoto | undefined> {
+    const [photo] = await db
+      .select()
+      .from(userPhotos)
+      .where(eq(userPhotos.id, photoId));
+    return photo;
+  }
+
+  async deletePhoto(photoId: string, objectStorageService?: any): Promise<void> {
+    // Get photo to retrieve objectKey
+    const photo = await this.getPhoto(photoId);
+    
+    if (!photo) {
+      return; // Photo already deleted
+    }
+    
+    try {
+      // Cascade delete likes and comments for this photo
+      await db.delete(mediaLikes).where(
+        and(
+          eq(mediaLikes.mediaType, 'photo'),
+          eq(mediaLikes.mediaId, photoId)
+        )
+      );
+      
+      await db.delete(mediaComments).where(
+        and(
+          eq(mediaComments.mediaType, 'photo'),
+          eq(mediaComments.mediaId, photoId)
+        )
+      );
+      
+      // Delete the GCS object if objectKey exists
+      if (photo.objectKey && objectStorageService) {
+        try {
+          await objectStorageService.deleteObject(photo.objectKey);
+        } catch (error) {
+          console.error("Error deleting GCS object:", error);
+          // Continue with metadata deletion even if GCS deletion fails
+        }
+      }
+      
+      // Delete the photo record
+      await db.delete(userPhotos).where(eq(userPhotos.id, photoId));
+    } catch (error) {
+      console.error("Error in deletePhoto:", error);
+      throw error;
+    }
+  }
+
+  async incrementPhotoViewCount(photoId: string): Promise<void> {
+    await db
+      .update(userPhotos)
+      .set({ viewCount: sql`${userPhotos.viewCount} + 1` })
+      .where(eq(userPhotos.id, photoId));
+  }
+
+  // Media like operations
+  async likeMedia(likeData: InsertMediaLike): Promise<MediaLike> {
+    const result = await db
+      .insert(mediaLikes)
+      .values(likeData)
+      .onConflictDoNothing()
+      .returning();
+    
+    // Only update like count if a row was actually inserted
+    if (result.length > 0 && likeData.mediaType === 'photo') {
+      await db
+        .update(userPhotos)
+        .set({ likeCount: sql`${userPhotos.likeCount} + 1` })
+        .where(eq(userPhotos.id, likeData.mediaId));
+    }
+    
+    return result[0];
+  }
+
+  async unlikeMedia(mediaType: string, mediaId: string, userId: string): Promise<void> {
+    const result = await db
+      .delete(mediaLikes)
+      .where(
+        and(
+          eq(mediaLikes.mediaType, mediaType),
+          eq(mediaLikes.mediaId, mediaId),
+          eq(mediaLikes.userId, userId)
+        )
+      )
+      .returning();
+    
+    // Only update like count if a row was actually deleted
+    if (result.length > 0 && mediaType === 'photo') {
+      await db
+        .update(userPhotos)
+        .set({ likeCount: sql`${userPhotos.likeCount} - 1` })
+        .where(eq(userPhotos.id, mediaId));
+    }
+  }
+
+  async getMediaLikes(mediaType: string, mediaId: string): Promise<MediaLike[]> {
+    const likes = await db
+      .select()
+      .from(mediaLikes)
+      .where(
+        and(
+          eq(mediaLikes.mediaType, mediaType),
+          eq(mediaLikes.mediaId, mediaId)
+        )
+      );
+    return likes;
+  }
+
+  async hasUserLikedMedia(mediaType: string, mediaId: string, userId: string): Promise<boolean> {
+    const [like] = await db
+      .select()
+      .from(mediaLikes)
+      .where(
+        and(
+          eq(mediaLikes.mediaType, mediaType),
+          eq(mediaLikes.mediaId, mediaId),
+          eq(mediaLikes.userId, userId)
+        )
+      )
+      .limit(1);
+    return !!like;
+  }
+
+  // Media comment operations
+  async addMediaComment(commentData: InsertMediaComment): Promise<MediaComment> {
+    const [comment] = await db
+      .insert(mediaComments)
+      .values(commentData)
+      .returning();
+    
+    // Update comment count
+    if (commentData.mediaType === 'photo') {
+      await db
+        .update(userPhotos)
+        .set({ commentCount: sql`${userPhotos.commentCount} + 1` })
+        .where(eq(userPhotos.id, commentData.mediaId));
+    }
+    
+    return comment;
+  }
+
+  async getMediaComments(mediaType: string, mediaId: string): Promise<MediaComment[]> {
+    const comments = await db
+      .select()
+      .from(mediaComments)
+      .where(
+        and(
+          eq(mediaComments.mediaType, mediaType),
+          eq(mediaComments.mediaId, mediaId)
+        )
+      )
+      .orderBy(desc(mediaComments.createdAt));
+    return comments;
+  }
+
+  async deleteMediaComment(commentId: string): Promise<void> {
+    // Get comment to decrement count
+    const [comment] = await db
+      .select()
+      .from(mediaComments)
+      .where(eq(mediaComments.id, commentId));
+    
+    if (comment) {
+      // Delete comment
+      await db.delete(mediaComments).where(eq(mediaComments.id, commentId));
+      
+      // Update comment count
+      if (comment.mediaType === 'photo') {
+        await db
+          .update(userPhotos)
+          .set({ commentCount: sql`${userPhotos.commentCount} - 1` })
+          .where(eq(userPhotos.id, comment.mediaId));
+      }
+    }
   }
 }
 

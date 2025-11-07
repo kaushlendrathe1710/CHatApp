@@ -60,10 +60,36 @@ Preferred communication style: Simple, everyday language.
 
 **API Endpoints:**
 - **Authentication:** `/api/auth/request-otp`, `/api/auth/verify-otp`, `/api/auth/register`, `/api/auth/user`, `/api/auth/logout`
-- **Users:** `/api/users`
+- **Users:** `/api/users`, `/api/users/discoverable`, `/api/users/:userId/can-view`
+- **Privacy:** `/api/users/privacy` (PUT/GET)
 - **Conversations:** `/api/conversations`, `/api/conversations/:id/settings`
 - **Messages:** `/api/messages/:conversationId`, `/api/messages`, `/api/messages/:id/forward`
 - **Reactions:** `/api/messages/:id/reactions`
 - **Broadcast Channels:** `/api/broadcast/create`, `/api/broadcast/:channelId/subscribe`
 - **Encryption:** `/api/encryption/keys`, `/api/encryption/keys/:conversationId`
 - **Object Storage:** `/api/object-storage/upload`, `/api/object-storage/objects/:permission/:fileName`
+- **Photos:** `/api/photos`, `/api/photos/user/:userId`, `/api/photos/:photoId`, `/api/photos/:photoId/like`, `/api/photos/:photoId/likes`, `/api/photos/:photoId/comments`
+
+## Recent Changes
+
+**Phase 1: Privacy Controls (✅ Completed)**
+- Added privacy fields to users table (profileVisibility, locationPrivacy, lastSeenVisibility, onlineStatusVisibility)
+- Created privacy management UI in `/settings/privacy`
+- Implemented sanitizeUserData method to enforce privacy rules across all user data responses
+- Added privacy-aware discovery system
+
+**Phase 2: Photo Gallery (✅ Completed - November 2025)**
+- **Database Schema**: Created user_photos, media_likes, media_comments tables with proper indexing and objectKey column
+- **Secure Upload Pipeline**: Implemented two-phase upload flow with server-controlled objectKey generation
+  - POST /api/photos/upload-url returns signed URL + canonical objectKey
+  - POST /api/photos validates objectKey, verifies GCS existence, and checks ObjectPermission.WRITE ownership
+  - Server resolves photoUrl from object metadata (no client-supplied URLs)
+- **GCS Lifecycle Management**: Photo deletion now properly cleans up GCS objects using stored objectKey
+- **Complete Authorization**: All photo endpoints (GET, like, unlike, comment) enforce canViewProfile privacy checks
+- **Data Integrity**: Like/comment counters only update on actual row changes; cascade delete for engagement data
+- **Frontend**: PhotoGallery page at `/photos` with Uppy-based secure upload dialog
+
+**Architecture Decisions:**
+- Media engagement tables (media_likes, media_comments) use application-level cascade instead of database foreign keys for flexibility across photo/video media types
+- ObjectKey stored alongside photoUrl enables proper GCS cleanup without orphaned storage objects
+- Two-phase upload prevents arbitrary URL injection: only server-generated objectKeys accepted

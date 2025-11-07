@@ -137,6 +137,367 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get photo upload URL with objectKey
+  app.post('/api/photos/upload-url', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      
+      // Normalize the full signed URL to get canonical /objects/... key
+      const objectKey = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      
+      res.json({ uploadURL, objectKey });
+    } catch (error) {
+      console.error("Error generating upload URL:", error);
+      res.status(500).json({ message: "Failed to generate upload URL" });
+    }
+  });
+
+  // Photo validation schema - now requires objectKey
+  const createPhotoSchema = z.object({
+    objectKey: z.string().min(1, "Object key is required"),
+    caption: z.string().optional(),
+    isProfilePhoto: z.boolean().optional(),
+  });
+
+  // Create/Upload photo
+  app.post('/api/photos', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      // Validate request body
+      const validationResult = createPhotoSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid photo data", 
+          errors: validationResult.error.errors 
+        });
+      }
+
+      const { objectKey, caption, isProfilePhoto } = validationResult.data;
+      
+      // Validate objectKey belongs to our storage
+      if (!objectKey.startsWith('/objects/')) {
+        return res.status(400).json({ message: "Invalid object key" });
+      }
+      
+      // Get the object file to verify it exists and user has access
+      try {
+        const objectFile = await objectStorageService.getObjectEntityFile(objectKey);
+        const [exists] = await objectFile.exists();
+        
+        if (!exists) {
+          return res.status(404).json({ message: "Uploaded file not found" });
+        }
+        
+        // Verify user has write access to this object (ownership check)
+        const { ObjectPermission } = await import('./objectAcl');
+        const canAccess = await objectStorageService.canAccessObjectEntity({
+          userId,
+          objectFile,
+          requestedPermission: ObjectPermission.WRITE,
+        });
+        
+        if (!canAccess) {
+          return res.status(403).json({ message: "Not authorized to use this object" });
+        }
+        
+        // Generate public URL from objectKey
+        const [metadata] = await objectFile.getMetadata();
+        const photoUrl = `https://storage.googleapis.com/${metadata.bucket}/${metadata.name}`;
+        
+        // Create photo record with both URL and objectKey
+        const photo = await storage.createPhoto({
+          userId,
+          photoUrl,
+          objectKey,
+          caption,
+          isProfilePhoto,
+        });
+        
+        res.json(photo);
+      } catch (error) {
+        console.error("Error verifying object:", error);
+        return res.status(400).json({ message: "Invalid or inaccessible object" });
+      }
+    } catch (error) {
+      console.error("Error creating photo:", error);
+      res.status(500).json({ message: "Failed to create photo" });
+    }
+  });
+
+  // Get user photos
+  app.get('/api/photos/user/:userId', isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUserId = req.user.id;
+      const { userId } = req.params;
+      
+      // Check if user can view the target user's profile
+      const canView = await storage.canViewProfile(currentUserId, userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to view this user's photos" });
+      }
+      
+      const photos = await storage.getUserPhotos(userId);
+      res.json(photos);
+    } catch (error) {
+      console.error("Error fetching photos:", error);
+      res.status(500).json({ message: "Failed to fetch photos" });
+    }
+  });
+
+  // Get single photo
+  app.get('/api/photos/:photoId', isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUserId = req.user.id;
+      const { photoId } = req.params;
+      const photo = await storage.getPhoto(photoId);
+      
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      // Check if user can view the photo owner's profile
+      const canView = await storage.canViewProfile(currentUserId, photo.userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to view this photo" });
+      }
+      
+      // Increment view count
+      await storage.incrementPhotoViewCount(photoId);
+      
+      res.json(photo);
+    } catch (error) {
+      console.error("Error fetching photo:", error);
+      res.status(500).json({ message: "Failed to fetch photo" });
+    }
+  });
+
+  // Delete photo
+  app.delete('/api/photos/:photoId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { photoId } = req.params;
+      
+      // Verify ownership
+      const photo = await storage.getPhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      if (photo.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized to delete this photo" });
+      }
+      
+      // Delete photo with GCS cleanup
+      await storage.deletePhoto(photoId, objectStorageService);
+      res.json({ message: "Photo deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting photo:", error);
+      res.status(500).json({ message: "Failed to delete photo" });
+    }
+  });
+
+  // Like photo
+  app.post('/api/photos/:photoId/like', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { photoId } = req.params;
+      
+      // Check if photo exists and user can view it
+      const photo = await storage.getPhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      const canView = await storage.canViewProfile(userId, photo.userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to like this photo" });
+      }
+      
+      const like = await storage.likeMedia({
+        mediaType: 'photo',
+        mediaId: photoId,
+        userId,
+      });
+      
+      res.json(like);
+    } catch (error) {
+      console.error("Error liking photo:", error);
+      res.status(500).json({ message: "Failed to like photo" });
+    }
+  });
+
+  // Unlike photo
+  app.delete('/api/photos/:photoId/like', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { photoId } = req.params;
+      
+      // Check if photo exists and user can view it
+      const photo = await storage.getPhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      const canView = await storage.canViewProfile(userId, photo.userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to unlike this photo" });
+      }
+      
+      await storage.unlikeMedia('photo', photoId, userId);
+      res.json({ message: "Photo unliked successfully" });
+    } catch (error) {
+      console.error("Error unliking photo:", error);
+      res.status(500).json({ message: "Failed to unlike photo" });
+    }
+  });
+
+  // Get photo likes
+  app.get('/api/photos/:photoId/likes', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { photoId } = req.params;
+      
+      // Check if photo exists and user can view it
+      const photo = await storage.getPhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      const canView = await storage.canViewProfile(userId, photo.userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to view this photo's likes" });
+      }
+      
+      const likes = await storage.getMediaLikes('photo', photoId);
+      res.json(likes);
+    } catch (error) {
+      console.error("Error fetching likes:", error);
+      res.status(500).json({ message: "Failed to fetch likes" });
+    }
+  });
+
+  // Check if user liked photo
+  app.get('/api/photos/:photoId/liked', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { photoId } = req.params;
+      
+      // Check if photo exists and user can view it
+      const photo = await storage.getPhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      const canView = await storage.canViewProfile(userId, photo.userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to view this photo" });
+      }
+      
+      const liked = await storage.hasUserLikedMedia('photo', photoId, userId);
+      res.json({ liked });
+    } catch (error) {
+      console.error("Error checking like status:", error);
+      res.status(500).json({ message: "Failed to check like status" });
+    }
+  });
+
+  // Add photo comment
+  const createCommentSchema = z.object({
+    content: z.string().min(1).max(500),
+  });
+
+  app.post('/api/photos/:photoId/comments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { photoId } = req.params;
+      
+      // Validate request body
+      const validationResult = createCommentSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid comment data", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      // Check if photo exists and user can view it
+      const photo = await storage.getPhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      const canView = await storage.canViewProfile(userId, photo.userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to comment on this photo" });
+      }
+      
+      const comment = await storage.addMediaComment({
+        mediaType: 'photo',
+        mediaId: photoId,
+        userId,
+        content: validationResult.data.content,
+      });
+      
+      res.json(comment);
+    } catch (error) {
+      console.error("Error adding comment:", error);
+      res.status(500).json({ message: "Failed to add comment" });
+    }
+  });
+
+  // Get photo comments
+  app.get('/api/photos/:photoId/comments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { photoId } = req.params;
+      
+      // Check if photo exists and user can view it
+      const photo = await storage.getPhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      const canView = await storage.canViewProfile(userId, photo.userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to view this photo's comments" });
+      }
+      
+      const comments = await storage.getMediaComments('photo', photoId);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  // Delete photo comment
+  app.delete('/api/photos/comments/:commentId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { commentId } = req.params;
+      
+      // Get comment to verify ownership
+      const comments = await storage.getMediaComments('photo', '');
+      const comment = comments.find(c => c.id === commentId);
+      
+      if (!comment) {
+        return res.status(404).json({ message: "Comment not found" });
+      }
+      
+      if (comment.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized to delete this comment" });
+      }
+      
+      await storage.deleteMediaComment(commentId);
+      res.json({ message: "Comment deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting comment:", error);
+      res.status(500).json({ message: "Failed to delete comment" });
+    }
+  });
+
   // Get user conversations
   app.get('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {

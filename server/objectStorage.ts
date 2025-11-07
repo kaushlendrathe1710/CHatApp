@@ -210,6 +210,16 @@ export class ObjectStorageService {
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });
   }
+
+  async deleteObject(objectPath: string): Promise<void> {
+    try {
+      const objectFile = await this.getObjectEntityFile(objectPath);
+      await objectFile.delete();
+    } catch (error) {
+      console.error("Error deleting object:", error);
+      throw error;
+    }
+  }
 }
 
 function parseObjectPath(path: string): {

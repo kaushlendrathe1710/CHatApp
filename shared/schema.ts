@@ -202,6 +202,78 @@ export const insertEncryptionKeySchema = createInsertSchema(encryptionKeys).omit
 export type InsertEncryptionKey = z.infer<typeof insertEncryptionKeySchema>;
 export type EncryptionKey = typeof encryptionKeys.$inferSelect;
 
+// User Photos table
+export const userPhotos = pgTable("user_photos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  photoUrl: varchar("photo_url").notNull(),
+  objectKey: varchar("object_key"), // GCS object key for lifecycle management
+  caption: text("caption"),
+  isProfilePhoto: boolean("is_profile_photo").default(false),
+  viewCount: integer("view_count").default(0),
+  likeCount: integer("like_count").default(0),
+  commentCount: integer("comment_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_user_photos_user").on(table.userId),
+  index("idx_user_photos_created").on(table.createdAt),
+  index("idx_user_photos_object_key").on(table.objectKey),
+]);
+
+export const insertUserPhotoSchema = createInsertSchema(userPhotos).omit({
+  id: true,
+  createdAt: true,
+  viewCount: true,
+  likeCount: true,
+  commentCount: true,
+});
+
+export type InsertUserPhoto = z.infer<typeof insertUserPhotoSchema>;
+export type UserPhoto = typeof userPhotos.$inferSelect;
+
+// Media Likes table (for photos and videos)
+export const mediaLikes = pgTable("media_likes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mediaType: text("media_type").notNull(), // photo, video
+  mediaId: varchar("media_id").notNull(), // references userPhotos.id or userVideos.id
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_media_likes_media").on(table.mediaType, table.mediaId),
+  index("idx_media_likes_user").on(table.userId),
+  unique("unique_media_like").on(table.mediaType, table.mediaId, table.userId),
+]);
+
+export const insertMediaLikeSchema = createInsertSchema(mediaLikes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMediaLike = z.infer<typeof insertMediaLikeSchema>;
+export type MediaLike = typeof mediaLikes.$inferSelect;
+
+// Media Comments table (for photos and videos)
+export const mediaComments = pgTable("media_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mediaType: text("media_type").notNull(), // photo, video
+  mediaId: varchar("media_id").notNull(), // references userPhotos.id or userVideos.id
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_media_comments_media").on(table.mediaType, table.mediaId),
+  index("idx_media_comments_user").on(table.userId),
+  index("idx_media_comments_created").on(table.createdAt),
+]);
+
+export const insertMediaCommentSchema = createInsertSchema(mediaComments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMediaComment = z.infer<typeof insertMediaCommentSchema>;
+export type MediaComment = typeof mediaComments.$inferSelect;
+
 // Typing indicators (ephemeral, tracked via WebSocket)
 export type TypingIndicator = {
   conversationId: string;
@@ -221,6 +293,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   conversationParticipants: many(conversationParticipants),
   messages: many(messages),
   createdConversations: many(conversations),
+  photos: many(userPhotos),
+  mediaLikes: many(mediaLikes),
+  mediaComments: many(mediaComments),
 }));
 
 export const conversationsRelations = relations(conversations, ({ one, many }) => ({
@@ -270,6 +345,29 @@ export const messageReactionsRelations = relations(messageReactions, ({ one }) =
   }),
   user: one(users, {
     fields: [messageReactions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const userPhotosRelations = relations(userPhotos, ({ one, many }) => ({
+  user: one(users, {
+    fields: [userPhotos.userId],
+    references: [users.id],
+  }),
+  likes: many(mediaLikes),
+  comments: many(mediaComments),
+}));
+
+export const mediaLikesRelations = relations(mediaLikes, ({ one }) => ({
+  user: one(users, {
+    fields: [mediaLikes.userId],
+    references: [users.id],
+  }),
+}));
+
+export const mediaCommentsRelations = relations(mediaComments, ({ one }) => ({
+  user: one(users, {
+    fields: [mediaComments.userId],
     references: [users.id],
   }),
 }));
