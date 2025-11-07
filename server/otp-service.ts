@@ -98,7 +98,7 @@ export class OTPService {
             <body>
               <div class="container">
                 <div class="header">
-                  <h1>🔐 Login Verification</h1>
+                  <h1>Login Verification</h1>
                 </div>
                 <div class="content">
                   <p>Hello,</p>
@@ -109,7 +109,7 @@ export class OTPService {
                   </div>
                   
                   <div class="warning">
-                    <strong>⚠️ Security Notice:</strong>
+                    <strong>Security Notice:</strong>
                     <ul style="margin: 10px 0; padding-left: 20px;">
                       <li>This OTP is valid for <strong>${OTP_EXPIRY_MINUTES} minutes</strong></li>
                       <li>You have <strong>${MAX_OTP_ATTEMPTS} attempts</strong> to enter the correct code</li>
@@ -120,7 +120,7 @@ export class OTPService {
                   <p>If you didn't request this code, please ignore this email or contact support if you have concerns about your account security.</p>
                   
                   <div class="footer">
-                    <p>© ${new Date().getFullYear()} Messaging App. All rights reserved.</p>
+                    <p>${new Date().getFullYear()} Messaging App. All rights reserved.</p>
                     <p>This is an automated email. Please do not reply.</p>
                   </div>
                 </div>
