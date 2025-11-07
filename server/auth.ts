@@ -65,8 +65,7 @@ const verifyOTPSchema = z.object({
 
 // Register user schema
 const registerUserSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
+  fullName: z.string().min(2, "Full name must be at least 2 characters"),
   username: z.string().min(3, "Username must be at least 3 characters").max(30),
   mobileNumber: z.string().min(10, "Valid mobile number is required"),
 });
@@ -143,8 +142,7 @@ export function setupAuth(app: Express) {
           id: user.id,
           email: user.email,
           username: user.username,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          fullName: user.fullName,
           mobileNumber: user.mobileNumber,
           isRegistered: user.isRegistered,
         },
@@ -165,7 +163,7 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ message: "Not authenticated" });
       }
 
-      const { firstName, lastName, username, mobileNumber } = registerUserSchema.parse(req.body);
+      const { fullName, username, mobileNumber } = registerUserSchema.parse(req.body);
 
       // Check if username is already taken
       const existingUser = await storage.getUserByUsername(username);
@@ -175,8 +173,7 @@ export function setupAuth(app: Express) {
 
       // Update user with registration details
       const user = await storage.updateUser(req.session.userId, {
-        firstName,
-        lastName,
+        fullName,
         username,
         mobileNumber,
         isRegistered: true,
@@ -188,8 +185,7 @@ export function setupAuth(app: Express) {
           id: user.id,
           email: user.email,
           username: user.username,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          fullName: user.fullName,
           mobileNumber: user.mobileNumber,
           isRegistered: user.isRegistered,
         },
@@ -221,8 +217,7 @@ export function setupAuth(app: Express) {
         id: user.id,
         email: user.email,
         username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        fullName: user.fullName,
         mobileNumber: user.mobileNumber,
         profileImageUrl: user.profileImageUrl,
         status: user.status,

@@ -37,37 +37,29 @@ export default function OTPVerification() {
     setIsLoading(true);
     try {
       const response = await apiRequest("POST", "/api/auth/verify-otp", { email, otp });
-
       const data = await response.json();
 
-      if (response.ok) {
-        queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-        
-        if (data.user.isRegistered) {
-          toast({
-            title: "Welcome back!",
-            description: "Login successful",
-          });
-          setLocation("/");
-        } else {
-          toast({
-            title: "Account created",
-            description: "Please complete your profile",
-          });
-          setLocation("/register");
-        }
+      // Update the query cache with the new user data
+      queryClient.setQueryData(['/api/auth/user'], data.user);
+      
+      if (data.user.isRegistered) {
+        toast({
+          title: "Welcome back!",
+          description: "Login successful",
+        });
+        setLocation("/");
       } else {
         toast({
-          title: "Verification failed",
-          description: data.message || "Invalid or expired code",
-          variant: "destructive",
+          title: "Account created",
+          description: "Please complete your profile",
         });
-        setOtp("");
+        setLocation("/register");
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("OTP verification error:", error);
       toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
+        title: "Verification failed",
+        description: error.message || "Invalid or expired code",
         variant: "destructive",
       });
       setOtp("");
