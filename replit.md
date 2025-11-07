@@ -43,6 +43,10 @@ Preferred communication style: Simple, everyday language.
 - `encryptionKeys`: Stores public RSA keys for E2E encryption per conversation-user pair.
 - `otps`: Stores hashed OTPs and expiry for authentication.
 - `sessions`: For session-based authentication.
+- `user_photos`: Stores photo metadata with objectKey for GCS lifecycle management.
+- `user_videos`: Stores video metadata with objectKey, duration (max 20s), and engagement metrics.
+- `media_likes`: Polymorphic likes for photos and videos (mediaType, mediaId).
+- `media_comments`: Polymorphic comments for photos and videos (mediaType, mediaId).
 
 **Storage Patterns:** Repository pattern (`IStorage`) with `DatabaseStorage` implementation. Optimized queries via Drizzle joins. Tracks message status (sent, delivered, read) and last seen/read for conversations.
 
@@ -68,7 +72,9 @@ Preferred communication style: Simple, everyday language.
 - **Broadcast Channels:** `/api/broadcast/create`, `/api/broadcast/:channelId/subscribe`
 - **Encryption:** `/api/encryption/keys`, `/api/encryption/keys/:conversationId`
 - **Object Storage:** `/api/object-storage/upload`, `/api/object-storage/objects/:permission/:fileName`
-- **Photos:** `/api/photos`, `/api/photos/user/:userId`, `/api/photos/:photoId`, `/api/photos/:photoId/like`, `/api/photos/:photoId/likes`, `/api/photos/:photoId/comments`
+- **Photos:** `/api/photos/upload-url`, `/api/photos`, `/api/photos/user/:userId`, `/api/photos/:photoId`, `/api/photos/:photoId/like`, `/api/photos/:photoId/likes`, `/api/photos/:photoId/comments`
+- **Videos:** `/api/videos/upload-url`, `/api/videos`, `/api/videos/user/:userId`, `/api/videos/:videoId`
+- **Media Engagement:** `/api/messages/:id/reactions` (supports both photos and videos via mediaType param)
 
 ## Recent Changes
 
@@ -89,7 +95,20 @@ Preferred communication style: Simple, everyday language.
 - **Data Integrity**: Like/comment counters only update on actual row changes; cascade delete for engagement data
 - **Frontend**: PhotoGallery page at `/photos` with Uppy-based secure upload dialog
 
+**Phase 3: Video Clips (✅ Completed - November 2025)**
+- **Database Schema**: Created user_videos table with videoUrl, thumbnailUrl, objectKey, caption, duration (max 20s), viewCount, likeCount, commentCount
+- **Secure Upload Pipeline**: Follows same objectKey-based pattern as photos
+  - POST /api/videos/upload-url returns signed URL + canonical objectKey
+  - POST /api/videos validates objectKey, verifies GCS existence, checks ObjectPermission.WRITE ownership
+  - Client-side duration validation using Math.ceil ensures videos ≤20s (e.g., 20.1s rejected)
+  - Server-side Zod schema enforces max 20-second duration
+- **GCS Lifecycle Management**: Video deletion cascades to GCS object cleanup via stored objectKey
+- **Complete Authorization**: All video endpoints enforce canViewProfile privacy checks
+- **Media Engagement Reuse**: Existing mediaLikes/mediaComments infrastructure extended to support mediaType='video'
+- **Frontend**: VideoGallery page at `/videos` with HTML5 video player, duration display, upload dialog with real-time validation
+
 **Architecture Decisions:**
 - Media engagement tables (media_likes, media_comments) use application-level cascade instead of database foreign keys for flexibility across photo/video media types
-- ObjectKey stored alongside photoUrl enables proper GCS cleanup without orphaned storage objects
+- ObjectKey stored alongside photoUrl/videoUrl enables proper GCS cleanup without orphaned storage objects
 - Two-phase upload prevents arbitrary URL injection: only server-generated objectKeys accepted
+- Duration validation uses Math.ceil on frontend to ensure strict ≤20s enforcement, mirrored by backend Zod schema
