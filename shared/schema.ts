@@ -25,12 +25,14 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// Users table (required for Replit Auth)
+// Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
+  email: varchar("email").unique().notNull(),
+  username: varchar("username").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
+  mobile: varchar("mobile"),
   profileImageUrl: varchar("profile_image_url"),
   status: text("status").default("Available"),
   lastSeen: timestamp("last_seen").defaultNow(),
@@ -38,8 +40,39 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastSeen: true,
+  status: true,
+});
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+
+// OTPs table for email verification
+export const otps = pgTable("otps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").notNull(),
+  hashedOtp: varchar("hashed_otp").notNull(),
+  attempts: integer("attempts").default(0).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_otps_email").on(table.email),
+  index("idx_otps_expires_at").on(table.expiresAt),
+]);
+
+export const insertOtpSchema = createInsertSchema(otps).omit({
+  id: true,
+  createdAt: true,
+  attempts: true,
+});
+
+export type InsertOtp = z.infer<typeof insertOtpSchema>;
+export type Otp = typeof otps.$inferSelect;
 
 // Conversations table (supports both 1-on-1, group chats, and broadcast channels)
 export const conversations = pgTable("conversations", {
