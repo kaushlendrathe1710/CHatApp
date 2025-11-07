@@ -103,10 +103,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await new Promise<void>((resolve, reject) => {
           req.session.save((err) => err ? reject(err) : resolve());
         });
-        return res.json({ success: true, requiresRegistration: false, user });
+        return res.json({ success: true, needsRegistration: false, user });
       }
 
-      res.json({ success: true, requiresRegistration: true, email: email.toLowerCase() });
+      res.json({ success: true, needsRegistration: true, email: email.toLowerCase() });
     } catch (error) {
       console.error("Error verifying OTP:", error);
       res.status(500).json({ message: "Failed to verify OTP" });
@@ -115,11 +115,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const { email, firstName, lastName, username, mobile } = req.body;
+      const { email, fullName, username, mobile } = req.body;
 
-      if (!email || !firstName || !username) {
-        return res.status(400).json({ message: "Email, first name, and username are required" });
+      if (!email || !fullName || !username) {
+        return res.status(400).json({ message: "Email, full name, and username are required" });
       }
+
+      const nameParts = fullName.trim().split(/\s+/);
+      const firstName = nameParts[0];
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined;
 
       const existingUser = await storage.getUserByEmail(email.toLowerCase());
       if (existingUser) {

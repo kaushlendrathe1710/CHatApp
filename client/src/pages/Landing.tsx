@@ -12,7 +12,7 @@ export default function Landing() {
             <span className="text-xl font-semibold">ChatApp</span>
           </div>
           <Button asChild data-testid="button-login">
-            <a href="/api/login">Log In</a>
+            <a href="/login">Log In</a>
           </Button>
         </div>
       </header>
@@ -29,7 +29,7 @@ export default function Landing() {
           </p>
           <div className="flex gap-4 justify-center pt-4">
             <Button size="lg" asChild data-testid="button-get-started">
-              <a href="/api/login">Get Started</a>
+              <a href="/login">Get Started</a>
             </Button>
           </div>
         </div>
@@ -82,7 +82,7 @@ export default function Landing() {
             Join thousands of users already chatting on ChatApp
           </p>
           <Button size="lg" asChild data-testid="button-join-now">
-            <a href="/api/login">Join Now - It's Free</a>
+            <a href="/login">Join Now - It's Free</a>
           </Button>
         </div>
       </section>
