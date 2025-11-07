@@ -1,20 +1,20 @@
-import nodemailer from 'nodemailer';
-import bcrypt from 'bcrypt';
-import { db } from './db';
-import { otps } from '@shared/schema';
-import { eq, and, lt } from 'drizzle-orm';
+import nodemailer from "nodemailer";
+import bcrypt from "bcrypt";
+import { db } from "./db";
+import { otps } from "@shared/schema";
+import { eq, and, gt } from "drizzle-orm";
 
 export class OTPService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: process.env.SMTP_SECURE === "true",
       auth: {
         user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
+        pass: process.env.SMTP_PASS,
       },
     });
   }
@@ -23,7 +23,9 @@ export class OTPService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  async sendOTP(email: string): Promise<{ success: boolean; expiresIn: number }> {
+  async sendOTP(
+    email: string
+  ): Promise<{ success: boolean; expiresIn: number }> {
     try {
       const otp = this.generateOTP();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -43,7 +45,7 @@ export class OTPService {
       const mailOptions = {
         from: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER,
         to: email,
-        subject: 'Your Login OTP - Messaging App',
+        subject: "Your Login OTP - Messaging App",
         html: `
           <!DOCTYPE html>
           <html>
@@ -87,15 +89,15 @@ export class OTPService {
 
       return { success: true, expiresIn: 600 };
     } catch (error) {
-      console.error('Error sending OTP:', error);
-      throw new Error('Failed to send OTP');
+      console.error("Error sending OTP:", error);
+      throw new Error("Failed to send OTP");
     }
   }
 
   async verifyOTP(email: string, otpCode: string): Promise<boolean> {
     try {
       const now = new Date();
-      
+
       const result = await db
         .select()
         .from(otps)
@@ -103,7 +105,7 @@ export class OTPService {
           and(
             eq(otps.email, email),
             eq(otps.verified, false),
-            lt(now, otps.expiresAt)
+            gt(now, otps.expiresAt)
           )
         )
         .limit(1);
@@ -114,7 +116,7 @@ export class OTPService {
 
       // Verify the hashed OTP
       const isValid = await bcrypt.compare(otpCode, result[0].otp);
-      
+
       if (!isValid) {
         return false;
       }
@@ -134,7 +136,7 @@ export class OTPService {
       const now = new Date();
       await db.delete(otps).where(lt(otps.expiresAt, now));
     } catch (error) {
-      console.error('Error cleaning up expired OTPs:', error);
+      console.error("Error cleaning up expired OTPs:", error);
     }
   }
 }
