@@ -69,6 +69,11 @@ export interface IStorage {
   subscribeToBroadcast(conversationId: string, userId: string): Promise<void>;
   unsubscribeFromBroadcast(conversationId: string, userId: string): Promise<void>;
   canSendToBroadcast(conversationId: string, userId: string): Promise<boolean>;
+  
+  // Privacy operations
+  updatePrivacySettings(userId: string, settings: Partial<Pick<User, 'profileVisibility' | 'locationPrivacy' | 'lastSeenVisibility' | 'onlineStatusVisibility'>>): Promise<User>;
+  getDiscoverableUsers(currentUserId: string): Promise<User[]>;
+  canViewProfile(viewerId: string, targetUserId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -579,6 +584,137 @@ export class DatabaseStorage implements IStorage {
       );
 
     return participant?.role === 'admin';
+  }
+
+  // Privacy operations
+  async updatePrivacySettings(
+    userId: string, 
+    settings: Partial<Pick<User, 'profileVisibility' | 'locationPrivacy' | 'lastSeenVisibility' | 'onlineStatusVisibility'>>
+  ): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ ...settings, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async getDiscoverableUsers(currentUserId: string): Promise<User[]> {
+    // Get all users that are visible to the current user
+    const allUsers = await db.select().from(users);
+    
+    // Filter based on privacy settings
+    const discoverableUsers: User[] = [];
+    
+    for (const user of allUsers) {
+      // Skip the current user
+      if (user.id === currentUserId) continue;
+      
+      // Check profile visibility
+      if (user.profileVisibility === 'hidden') {
+        continue; // User is hidden from everyone
+      }
+      
+      if (user.profileVisibility === 'past_chats') {
+        // Check if current user has chatted with this user before
+        const hasConversation = await this.hasConversationWith(currentUserId, user.id);
+        if (!hasConversation) {
+          continue; // Skip users who haven't chatted before
+        }
+      }
+      
+      // User passes visibility check - sanitize data based on privacy settings
+      const sanitizedUser = await this.sanitizeUserData(user, currentUserId);
+      discoverableUsers.push(sanitizedUser);
+    }
+    
+    return discoverableUsers;
+  }
+
+  async canViewProfile(viewerId: string, targetUserId: string): Promise<boolean> {
+    const targetUser = await this.getUser(targetUserId);
+    if (!targetUser) return false;
+    
+    // Check profile visibility
+    if (targetUser.profileVisibility === 'hidden') {
+      return false; // Hidden from everyone
+    }
+    
+    if (targetUser.profileVisibility === 'past_chats') {
+      // Check if viewer has chatted with target before
+      return await this.hasConversationWith(viewerId, targetUserId);
+    }
+    
+    // 'everyone' - visible to all
+    return true;
+  }
+
+  // Helper method to check if two users have a conversation together
+  private async hasConversationWith(userId1: string, userId2: string): Promise<boolean> {
+    // Get all conversations for user1
+    const user1Convos = await db
+      .select({ conversationId: conversationParticipants.conversationId })
+      .from(conversationParticipants)
+      .where(eq(conversationParticipants.userId, userId1));
+    
+    const conversationIds = user1Convos.map(c => c.conversationId);
+    
+    if (conversationIds.length === 0) return false;
+    
+    // Check if user2 is in any of these conversations
+    const sharedConvo = await db
+      .select()
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.userId, userId2),
+          inArray(conversationParticipants.conversationId, conversationIds)
+        )
+      )
+      .limit(1);
+    
+    return sharedConvo.length > 0;
+  }
+
+  // Helper method to sanitize user data based on privacy settings
+  async sanitizeUserData(targetUser: User, viewerId: string): Promise<User> {
+    // Create a copy to avoid mutating original
+    const sanitizedUser = { ...targetUser };
+    
+    // Check if viewer has chatted with target
+    const hasConnection = await this.hasConversationWith(viewerId, targetUser.id);
+    
+    // Apply location privacy
+    switch (targetUser.locationPrivacy) {
+      case 'hidden':
+        // Remove all location data
+        sanitizedUser.profileImageUrl = sanitizedUser.profileImageUrl; // Keep profile image
+        break;
+      case 'country':
+        // Only show country-level location (would need city/country fields to implement fully)
+        break;
+      case 'city':
+        // Show city but not exact location (would need precise coordinates to hide)
+        break;
+      case 'exact':
+      default:
+        // Show exact location
+        break;
+    }
+    
+    // Apply last seen privacy
+    if (targetUser.lastSeenVisibility === 'hidden') {
+      sanitizedUser.lastSeen = null;
+    } else if (targetUser.lastSeenVisibility === 'connections' && !hasConnection) {
+      sanitizedUser.lastSeen = null;
+    }
+    
+    // Apply online status privacy
+    if (!targetUser.onlineStatusVisibility) {
+      sanitizedUser.lastSeen = null;
+    }
+    
+    return sanitizedUser;
   }
 }
 

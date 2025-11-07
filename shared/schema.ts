@@ -36,6 +36,11 @@ export const users = pgTable("users", {
   status: text("status").default("Available"),
   lastSeen: timestamp("last_seen").defaultNow(),
   isRegistered: boolean("is_registered").default(false).notNull(),
+  // Privacy settings
+  profileVisibility: text("profile_visibility").default("everyone").notNull(), // everyone, past_chats, hidden
+  locationPrivacy: text("location_privacy").default("city").notNull(), // exact, city, country, hidden
+  lastSeenVisibility: text("last_seen_visibility").default("everyone").notNull(), // everyone, connections, hidden
+  onlineStatusVisibility: boolean("online_status_visibility").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

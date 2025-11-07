@@ -10,6 +10,7 @@ import EmailLogin from "@/pages/EmailLogin";
 import OTPVerification from "@/pages/OTPVerification";
 import Registration from "@/pages/Registration";
 import Home from "@/pages/Home";
+import PrivacySettings from "@/pages/PrivacySettings";
 
 function Router() {
   const { user, isLoading } = useAuth();
@@ -40,6 +41,9 @@ function Router() {
       </Route>
       <Route path="/dashboard">
         {!isAuthenticated ? <Redirect to="/" /> : needsRegistration ? <Redirect to="/register" /> : <Home />}
+      </Route>
+      <Route path="/settings/privacy">
+        {!isAuthenticated ? <Redirect to="/" /> : <PrivacySettings />}
       </Route>
       <Route component={NotFound} />
     </Switch>

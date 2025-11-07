@@ -8,6 +8,7 @@ import connectPg from "connect-pg-simple";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { insertConversationSchema, insertMessageSchema } from "@shared/schema";
+import { z } from "zod";
 
 // WebSocket client tracking
 const wsClients = new Map<string, Set<WebSocket>>();
@@ -52,14 +53,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   setupAuth(app);
 
-  // Get all users
-  app.get('/api/users', isAuthenticated, async (req, res) => {
+  // Get all users (sanitized based on privacy settings)
+  app.get('/api/users', isAuthenticated, async (req: any, res) => {
     try {
-      const users = await storage.getAllUsers();
-      res.json(users);
+      const currentUserId = req.user.id;
+      const allUsers = await storage.getAllUsers();
+      
+      // Sanitize each user's data based on their privacy settings
+      const sanitizedUsers = await Promise.all(
+        allUsers
+          .filter(u => u.id !== currentUserId) // Exclude current user
+          .map(user => storage.sanitizeUserData(user, currentUserId))
+      );
+      
+      res.json(sanitizedUsers);
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Get discoverable users (filtered by privacy settings)
+  app.get('/api/users/discoverable', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const users = await storage.getDiscoverableUsers(userId);
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching discoverable users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Privacy settings validation schema
+  const updatePrivacySchema = z.object({
+    profileVisibility: z.enum(["everyone", "past_chats", "hidden"]).optional(),
+    locationPrivacy: z.enum(["exact", "city", "country", "hidden"]).optional(),
+    lastSeenVisibility: z.enum(["everyone", "connections", "hidden"]).optional(),
+    onlineStatusVisibility: z.boolean().optional(),
+  });
+
+  // Update privacy settings
+  app.put('/api/users/privacy', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      // Validate request body
+      const validationResult = updatePrivacySchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid privacy settings", 
+          errors: validationResult.error.errors 
+        });
+      }
+
+      const { profileVisibility, locationPrivacy, lastSeenVisibility, onlineStatusVisibility } = validationResult.data;
+
+      const updates: any = {};
+      if (profileVisibility) updates.profileVisibility = profileVisibility;
+      if (locationPrivacy) updates.locationPrivacy = locationPrivacy;
+      if (lastSeenVisibility) updates.lastSeenVisibility = lastSeenVisibility;
+      if (onlineStatusVisibility !== undefined) updates.onlineStatusVisibility = onlineStatusVisibility;
+
+      const updatedUser = await storage.updatePrivacySettings(userId, updates);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating privacy settings:", error);
+      res.status(500).json({ message: "Failed to update privacy settings" });
+    }
+  });
+
+  // Check if can view profile
+  app.get('/api/users/:userId/can-view', isAuthenticated, async (req: any, res) => {
+    try {
+      const viewerId = req.user.id;
+      const { userId } = req.params;
+
+      const canView = await storage.canViewProfile(viewerId, userId);
+      res.json({ canView });
+    } catch (error) {
+      console.error("Error checking view permission:", error);
+      res.status(500).json({ message: "Failed to check permission" });
     }
   });
 

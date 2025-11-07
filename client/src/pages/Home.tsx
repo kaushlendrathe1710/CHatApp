@@ -48,6 +48,7 @@ import {
   Image as ImageIcon,
   Radio,
   Shield,
+  Settings,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -522,6 +523,15 @@ export default function Home() {
             </Button>
             <NewConversationDialog users={allUsers} onCreateConversation={createConversationMutation.mutate} />
             <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setLocation("/settings/privacy")}
+              data-testid="button-privacy-settings"
+              title="Privacy Settings"
+            >
+              <Settings className="h-5 w-5" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
