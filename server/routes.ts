@@ -498,6 +498,171 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============= VIDEO ENDPOINTS =============
+  
+  // Get video upload URL with objectKey
+  app.post('/api/videos/upload-url', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      
+      // Normalize the full signed URL to get canonical /objects/... key
+      const objectKey = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      
+      res.json({ uploadURL, objectKey });
+    } catch (error) {
+      console.error("Error generating video upload URL:", error);
+      res.status(500).json({ message: "Failed to generate upload URL" });
+    }
+  });
+
+  // Video validation schema - requires objectKey
+  const createVideoSchema = z.object({
+    objectKey: z.string().min(1, "Object key is required"),
+    thumbnailUrl: z.string().url().optional(),
+    caption: z.string().optional(),
+    duration: z.number().min(1).max(20, "Video must be 20 seconds or less").optional(),
+  });
+
+  // Create video
+  app.post('/api/videos', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      // Validate request body
+      const validationResult = createVideoSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid video data", 
+          errors: validationResult.error.errors 
+        });
+      }
+
+      const { objectKey, thumbnailUrl, caption, duration } = validationResult.data;
+      
+      // Validate objectKey belongs to our storage
+      if (!objectKey.startsWith('/objects/')) {
+        return res.status(400).json({ message: "Invalid object key" });
+      }
+      
+      // Get the object file to verify it exists and user has access
+      try {
+        const objectFile = await objectStorageService.getObjectEntityFile(objectKey);
+        const [exists] = await objectFile.exists();
+        
+        if (!exists) {
+          return res.status(404).json({ message: "Uploaded file not found" });
+        }
+        
+        // Verify user has write access to this object (ownership check)
+        const { ObjectPermission } = await import('./objectAcl');
+        const canAccess = await objectStorageService.canAccessObjectEntity({
+          userId,
+          objectFile,
+          requestedPermission: ObjectPermission.WRITE,
+        });
+        
+        if (!canAccess) {
+          return res.status(403).json({ message: "Not authorized to use this object" });
+        }
+        
+        // Generate public URL from objectKey
+        const [metadata] = await objectFile.getMetadata();
+        const videoUrl = `https://storage.googleapis.com/${metadata.bucket}/${metadata.name}`;
+        
+        // Create video record with both URL and objectKey
+        const video = await storage.createVideo({
+          userId,
+          videoUrl,
+          objectKey,
+          thumbnailUrl,
+          caption,
+          duration,
+        });
+        
+        res.json(video);
+      } catch (error) {
+        console.error("Error verifying object:", error);
+        return res.status(400).json({ message: "Invalid or inaccessible object" });
+      }
+    } catch (error) {
+      console.error("Error creating video:", error);
+      res.status(500).json({ message: "Failed to create video" });
+    }
+  });
+
+  // Get user videos
+  app.get('/api/videos/user/:userId', isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUserId = req.user.id;
+      const { userId } = req.params;
+      
+      // Check if current user can view target user's profile
+      const canView = await storage.canViewProfile(currentUserId, userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to view this user's videos" });
+      }
+      
+      const videos = await storage.getUserVideos(userId);
+      res.json(videos);
+    } catch (error) {
+      console.error("Error fetching user videos:", error);
+      res.status(500).json({ message: "Failed to fetch videos" });
+    }
+  });
+
+  // Get single video
+  app.get('/api/videos/:videoId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { videoId } = req.params;
+      
+      const video = await storage.getVideo(videoId);
+      if (!video) {
+        return res.status(404).json({ message: "Video not found" });
+      }
+      
+      // Check if user can view the video owner's profile
+      const canView = await storage.canViewProfile(userId, video.userId);
+      if (!canView) {
+        return res.status(403).json({ message: "Not authorized to view this video" });
+      }
+      
+      // Increment view count
+      await storage.incrementVideoViewCount(videoId);
+      
+      res.json(video);
+    } catch (error) {
+      console.error("Error fetching video:", error);
+      res.status(500).json({ message: "Failed to fetch video" });
+    }
+  });
+
+  // Delete video
+  app.delete('/api/videos/:videoId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { videoId } = req.params;
+      
+      // Verify ownership
+      const video = await storage.getVideo(videoId);
+      if (!video) {
+        return res.status(404).json({ message: "Video not found" });
+      }
+      
+      if (video.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized to delete this video" });
+      }
+      
+      // Delete video with GCS cleanup
+      await storage.deleteVideo(videoId, objectStorageService);
+      res.json({ message: "Video deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting video:", error);
+      res.status(500).json({ message: "Failed to delete video" });
+    }
+  });
+
   // Get user conversations
   app.get('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
