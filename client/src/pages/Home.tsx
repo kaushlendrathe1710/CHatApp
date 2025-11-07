@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebSocket } from "@/lib/websocket";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -53,6 +54,7 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 
 export default function Home() {
   const { user, isLoading: authLoading } = useAuth();
+  const [, setLocation] = useLocation();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [typingUsers, setTypingUsers] = useState<Map<string, Set<string>>>(new Map());
@@ -523,12 +525,23 @@ export default function Home() {
             <Button
               variant="ghost"
               size="icon"
-              asChild
+              onClick={async () => {
+                try {
+                  await apiRequest("POST", "/api/auth/logout");
+                  queryClient.setQueryData(['/api/auth/user'], null);
+                  setLocation("/login");
+                } catch (error) {
+                  console.error("Logout error:", error);
+                  toast({
+                    title: "Logout failed",
+                    description: "Please try again",
+                    variant: "destructive",
+                  });
+                }
+              }}
               data-testid="button-logout"
             >
-              <a href="/api/logout">
-                <LogOut className="h-5 w-5" />
-              </a>
+              <LogOut className="h-5 w-5" />
             </Button>
           </div>
         </div>
