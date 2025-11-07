@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import { db } from "./db";
 import { otps } from "@shared/schema";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, lt } from "drizzle-orm";
 
 export class OTPService {
   private transporter: nodemailer.Transporter;
@@ -30,17 +30,30 @@ export class OTPService {
       const otp = this.generateOTP();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+      console.info(
+        `sendOTP: generating OTP for=${email} expiresAt=${expiresAt.toISOString()}`
+      );
       // Invalidate all previous OTPs for this email
       await db.delete(otps).where(eq(otps.email, email));
+      console.debug(`sendOTP: cleared previous OTPs for=${email}`);
 
       // Hash the OTP before storing
       const hashedOTP = await bcrypt.hash(otp, 10);
+
+      // store masked OTP in logs only (last 2 digits) to help debugging without leaking full code
+      const masked = `***${otp.slice(-2)}`;
+      console.debug(
+        `sendOTP: storing hashed OTP for=${email} masked=${masked}`
+      );
 
       await db.insert(otps).values({
         email,
         otp: hashedOTP,
         expiresAt,
       });
+      console.info(
+        `sendOTP: inserted OTP row for=${email} expiresAt=${expiresAt.toISOString()}`
+      );
 
       const mailOptions = {
         from: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER,
@@ -85,11 +98,16 @@ export class OTPService {
         `,
       };
 
-      await this.transporter.sendMail(mailOptions);
+      const info = await this.transporter.sendMail(mailOptions);
+      console.info(
+        `sendOTP: mail sent to=${email} messageId=${
+          info?.messageId || "unknown"
+        }`
+      );
 
       return { success: true, expiresIn: 600 };
     } catch (error) {
-      console.error("Error sending OTP:", error);
+      console.error("sendOTP error:", error);
       throw new Error("Failed to send OTP");
     }
   }
@@ -97,7 +115,9 @@ export class OTPService {
   async verifyOTP(email: string, otpCode: string): Promise<boolean> {
     try {
       const now = new Date();
+      console.info(`verifyOTP: attempt for=${email} at=${now.toISOString()}`);
 
+      // find non-verified OTPs that have NOT expired (expiresAt > now)
       const result = await db
         .select()
         .from(otps)
@@ -105,28 +125,53 @@ export class OTPService {
           and(
             eq(otps.email, email),
             eq(otps.verified, false),
-            gt(now, otps.expiresAt)
+            // ensure the stored expiresAt is still in the future
+            gt(otps.expiresAt, now)
           )
         )
         .limit(1);
 
+      console.debug(
+        "verifyOTP: db result count=",
+        result.length,
+        "email=",
+        email
+      );
+      if (result.length > 0) {
+        // log metadata but never the hashed OTP value directly in info-level logs
+        console.debug(
+          `verifyOTP: found row id=${result[0].id} expiresAt=${new Date(
+            result[0].expiresAt
+          ).toISOString()}`
+        );
+      }
       if (result.length === 0) {
+        console.warn(
+          `verifyOTP: no valid OTP row found for=${email} (maybe expired or already used)`
+        );
         return false;
       }
 
       // Verify the hashed OTP
       const isValid = await bcrypt.compare(otpCode, result[0].otp);
 
+      console.info(
+        `verifyOTP: comparison result for=${email} valid=${isValid}`
+      );
       if (!isValid) {
+        console.warn(`verifyOTP: invalid OTP provided for=${email}`);
         return false;
       }
 
       // Mark as verified and delete after successful verification
       await db.delete(otps).where(eq(otps.id, result[0].id));
+      console.info(
+        `verifyOTP: successful verification and deleted row id=${result[0].id} for=${email}`
+      );
 
       return true;
     } catch (error) {
-      console.error('Error verifying OTP:', error);
+      console.error("verifyOTP error:", error);
       return false;
     }
   }
@@ -134,7 +179,9 @@ export class OTPService {
   async cleanupExpiredOTPs(): Promise<void> {
     try {
       const now = new Date();
-      await db.delete(otps).where(lt(otps.expiresAt, now));
+      console.info(`cleanupExpiredOTPs: running at=${now.toISOString()}`);
+      const res = await db.delete(otps).where(lt(otps.expiresAt, now));
+      console.info("cleanupExpiredOTPs: finished", res);
     } catch (error) {
       console.error("Error cleaning up expired OTPs:", error);
     }
