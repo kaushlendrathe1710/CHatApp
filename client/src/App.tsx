@@ -12,7 +12,6 @@ import Registration from "@/pages/Registration";
 import Home from "@/pages/Home";
 import PrivacySettings from "@/pages/PrivacySettings";
 import PhotoGallery from "@/pages/PhotoGallery";
-import VideoGallery from "@/pages/VideoGallery";
 
 function Router() {
   const { user, isLoading } = useAuth();
@@ -49,9 +48,6 @@ function Router() {
       </Route>
       <Route path="/photos">
         {!isAuthenticated ? <Redirect to="/" /> : <PhotoGallery />}
-      </Route>
-      <Route path="/videos">
-        {!isAuthenticated ? <Redirect to="/" /> : <VideoGallery />}
       </Route>
       <Route component={NotFound} />
     </Switch>

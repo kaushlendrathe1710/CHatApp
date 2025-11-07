@@ -50,7 +50,6 @@ import {
   Shield,
   Settings,
   ImagePlus,
-  Film,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -533,15 +532,6 @@ export default function Home() {
               title="Photo Gallery"
             >
               <ImagePlus className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setLocation("/videos")}
-              data-testid="button-video-gallery"
-              title="Video Gallery"
-            >
-              <Film className="h-5 w-5" />
             </Button>
             <Button
               variant="ghost"
