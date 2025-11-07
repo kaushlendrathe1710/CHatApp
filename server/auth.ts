@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import rateLimit from "express-rate-limit";
 import { otpService } from "./otp-service";
 import { storage } from "./storage";
 
@@ -17,10 +18,35 @@ declare global {
   }
 }
 
-// Authentication middleware
-export function isAuthenticated(req: Request, res: Response, next: NextFunction) {
+// Extend session type to include userId
+declare module 'express-session' {
+  interface SessionData {
+    userId: string;
+    email: string;
+  }
+}
+
+// Authentication middleware - attaches user to req for convenience
+export async function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.session && req.session.userId) {
-    next();
+    try {
+      const user = await storage.getUser(req.session.userId);
+      if (user) {
+        req.user = {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          isRegistered: user.isRegistered,
+        };
+        next();
+      } else {
+        req.session.destroy(() => {});
+        res.status(401).json({ message: "User not found" });
+      }
+    } catch (error) {
+      console.error("Auth middleware error:", error);
+      res.status(500).json({ message: "Authentication failed" });
+    }
   } else {
     res.status(401).json({ message: "Not authenticated" });
   }
@@ -45,10 +71,27 @@ const registerUserSchema = z.object({
   mobileNumber: z.string().min(10, "Valid mobile number is required"),
 });
 
+// Rate limiters
+const otpRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // Max 3 requests per 15 minutes per IP
+  message: "Too many OTP requests, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const otpVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Max 5 verification attempts per 15 minutes per IP
+  message: "Too many verification attempts, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Setup auth routes
 export function setupAuth(app: Express) {
   // Request OTP
-  app.post('/api/auth/request-otp', async (req: Request, res: Response) => {
+  app.post('/api/auth/request-otp', otpRequestLimiter, async (req: Request, res: Response) => {
     try {
       const { email } = requestOTPSchema.parse(req.body);
 
@@ -69,7 +112,7 @@ export function setupAuth(app: Express) {
   });
 
   // Verify OTP
-  app.post('/api/auth/verify-otp', async (req: Request, res: Response) => {
+  app.post('/api/auth/verify-otp', otpVerifyLimiter, async (req: Request, res: Response) => {
     try {
       const { email, otp } = verifyOTPSchema.parse(req.body);
 

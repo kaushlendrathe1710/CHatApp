@@ -2,7 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated } from "./auth";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { insertConversationSchema, insertMessageSchema } from "@shared/schema";
@@ -23,23 +25,35 @@ export function broadcastToConversation(conversationId: string, message: any) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
+  // Setup session
+  const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+  const pgStore = connectPg(session);
+  const sessionStore = new pgStore({
+    conString: process.env.DATABASE_URL,
+    createTableIfMissing: false,
+    ttl: sessionTtl,
+    tableName: "sessions",
+  });
+  
+  app.set("trust proxy", 1);
+  app.use(session({
+    secret: process.env.SESSION_SECRET!,
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax', // CSRF protection
+      maxAge: sessionTtl,
+    },
+  }));
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
-    }
-  });
+  setupAuth(app);
 
   // Get all users
-  app.get('/api/users', isAuthenticated, async (req: any, res) => {
+  app.get('/api/users', isAuthenticated, async (req, res) => {
     try {
       const users = await storage.getAllUsers();
       res.json(users);
@@ -52,7 +66,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user conversations
   app.get('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const conversations = await storage.getUserConversations(userId);
       res.json(conversations);
     } catch (error) {
@@ -64,7 +78,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create conversation
   app.post('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { userIds, isGroup, name } = req.body;
 
       if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
@@ -107,7 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/messages/:conversationId', isAuthenticated, async (req: any, res) => {
     try {
       const { conversationId } = req.params;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Mark messages as read
       await storage.updateConversationReadStatus(conversationId, userId);
@@ -137,7 +151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Send a message
   app.post('/api/messages', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId, content, type, fileUrl, fileName, fileSize, replyToId } = req.body;
 
       if (!conversationId) {
@@ -213,7 +227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add reaction to message
   app.post('/api/messages/:messageId/reactions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { messageId } = req.params;
       const { emoji, conversationId } = req.body;
 
@@ -245,7 +259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Remove reaction from message
   app.delete('/api/messages/:messageId/reactions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { messageId } = req.params;
 
       await storage.removeReaction(messageId, userId);
@@ -260,7 +274,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Forward message to other conversations
   app.post('/api/messages/:messageId/forward', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { messageId } = req.params;
       const { conversationIds } = req.body;
 
@@ -315,7 +329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create broadcast channel
   app.post('/api/broadcast/create', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { name, description } = req.body;
 
       if (!name) {
@@ -333,7 +347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subscribe to broadcast channel
   app.post('/api/broadcast/:channelId/subscribe', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { channelId } = req.params;
 
       await storage.subscribeToBroadcast(channelId, userId);
@@ -347,7 +361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Unsubscribe from broadcast channel
   app.post('/api/broadcast/:channelId/unsubscribe', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { channelId } = req.params;
 
       await storage.unsubscribeFromBroadcast(channelId, userId);
@@ -363,7 +377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Store encryption public key
   app.post('/api/encryption/keys', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId, publicKey } = req.body;
 
       if (!conversationId || !publicKey) {

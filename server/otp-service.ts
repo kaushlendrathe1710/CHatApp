@@ -1,7 +1,8 @@
 import nodemailer from 'nodemailer';
+import bcrypt from 'bcrypt';
 import { db } from './db';
 import { otps } from '@shared/schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and, lt } from 'drizzle-orm';
 
 export class OTPService {
   private transporter: nodemailer.Transporter;
@@ -27,9 +28,15 @@ export class OTPService {
       const otp = this.generateOTP();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+      // Invalidate all previous OTPs for this email
+      await db.delete(otps).where(eq(otps.email, email));
+
+      // Hash the OTP before storing
+      const hashedOTP = await bcrypt.hash(otp, 10);
+
       await db.insert(otps).values({
         email,
-        otp,
+        otp: hashedOTP,
         expiresAt,
       });
 
@@ -95,9 +102,8 @@ export class OTPService {
         .where(
           and(
             eq(otps.email, email),
-            eq(otps.otp, otpCode),
             eq(otps.verified, false),
-            gt(otps.expiresAt, now)
+            lt(now, otps.expiresAt)
           )
         )
         .limit(1);
@@ -106,10 +112,15 @@ export class OTPService {
         return false;
       }
 
-      await db
-        .update(otps)
-        .set({ verified: true })
-        .where(eq(otps.id, result[0].id));
+      // Verify the hashed OTP
+      const isValid = await bcrypt.compare(otpCode, result[0].otp);
+      
+      if (!isValid) {
+        return false;
+      }
+
+      // Mark as verified and delete after successful verification
+      await db.delete(otps).where(eq(otps.id, result[0].id));
 
       return true;
     } catch (error) {
@@ -121,11 +132,7 @@ export class OTPService {
   async cleanupExpiredOTPs(): Promise<void> {
     try {
       const now = new Date();
-      await db.delete(otps).where(
-        and(
-          gt(now, otps.expiresAt)
-        )
-      );
+      await db.delete(otps).where(lt(otps.expiresAt, now));
     } catch (error) {
       console.error('Error cleaning up expired OTPs:', error);
     }
