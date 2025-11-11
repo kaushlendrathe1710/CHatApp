@@ -527,6 +527,15 @@ export default function Home() {
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => setLocation("/people")}
+              data-testid="button-all-people"
+              title="All People"
+            >
+              <Users className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setLocation("/photos")}
               data-testid="button-photo-gallery"
               title="Photo Gallery"
