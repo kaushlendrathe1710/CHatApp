@@ -89,7 +89,22 @@ Preferred communication style: Simple, everyday language.
 - **Data Integrity**: Like/comment counters only update on actual row changes; cascade delete for engagement data
 - **Frontend**: PhotoGallery page at `/photos` with Uppy-based secure upload dialog
 
+**Phase 3: People Discovery (✅ Completed - November 2025)**
+- **Enhanced User Discovery**: Created dedicated People page at `/people` for viewing all platform users
+- **Privacy-Aware Filtering**: Updated GET /api/users endpoint to filter out:
+  - Current user (self-exclusion)
+  - Users with `profileVisibility === 'hidden'`
+  - Applies `sanitizeUserData` to respect privacy settings (lastSeen, onlineStatus, location)
+- **Search Functionality**: Real-time client-side search filtering by name, username, or email
+- **Quick Chat Initiation**: One-click conversation creation from user cards via POST /api/conversations
+- **Responsive UI**: Grid layout with user avatars, display names, status messages, and last seen timestamps
+- **Navigation**: Accessible from dashboard header via "All People" button (Users icon)
+- **Error Handling**: Comprehensive loading, error, and empty states with retry functionality
+- **Testing Coverage**: All interactive elements and dynamic user data have data-testid attributes
+
 **Architecture Decisions:**
 - Media engagement tables (media_likes, media_comments) use application-level cascade instead of database foreign keys for flexibility across photo/video media types
 - ObjectKey stored alongside photoUrl enables proper GCS cleanup without orphaned storage objects
 - Two-phase upload prevents arbitrary URL injection: only server-generated objectKeys accepted
+- People page uses existing /api/users endpoint (enhanced with hidden user filtering) to maintain consistency with privacy system
+- Conversation creation leverages existing getOrCreateDirectConversation logic to prevent duplicate conversations

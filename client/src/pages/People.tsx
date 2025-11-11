@@ -10,7 +10,6 @@ import { ArrowLeft, Search, MessageCircle, Users as UsersIcon } from "lucide-rea
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getUserDisplayName, formatLastSeen } from "@/lib/formatters";
-import { OnlineStatus } from "@/components/OnlineStatus";
 import type { User } from "@shared/schema";
 
 export default function People() {
@@ -201,7 +200,6 @@ export default function People() {
                           {getUserDisplayName(user).slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <OnlineStatus userId={user.id} className="absolute -bottom-1 -right-1" />
                     </div>
 
                     {/* User Info */}
