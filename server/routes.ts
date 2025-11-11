@@ -63,6 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sanitizedUsers = await Promise.all(
         allUsers
           .filter(u => u.id !== currentUserId) // Exclude current user
+          .filter(u => u.profileVisibility !== 'hidden') // Exclude hidden users
           .map(user => storage.sanitizeUserData(user, currentUserId))
       );
       
