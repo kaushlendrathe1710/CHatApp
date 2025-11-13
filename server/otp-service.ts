@@ -3,14 +3,15 @@ import bcrypt from "bcrypt";
 import { db } from "./db";
 import { otps } from "@shared/schema";
 import { eq, and, gt, lt } from "drizzle-orm";
+import "dotenv/config";
 
 export class OTPService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
     // Check if SMTP is configured
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
-      console.error('SMTP credentials not configured. Please set SMTP_USER and SMTP_PASSWORD environment variables.');
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.error('SMTP credentials not configured. Please set SMTP_USER and SMTP_PASS environment variables.');
     }
 
     this.transporter = nodemailer.createTransport({
@@ -33,7 +34,7 @@ export class OTPService {
   ): Promise<{ success: boolean; expiresIn: number }> {
     try {
       // Check if SMTP is configured
-      if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+      if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
         throw new Error('SMTP not configured. Please contact the administrator.');
       }
 
