@@ -40,7 +40,8 @@ export default function OTPVerification() {
       const data = await response.json();
 
       // Update the query cache with the new user data
-      queryClient.setQueryData(['/api/auth/user'], data.user);
+      // queryClient.setQueryData(['/api/auth/user'], data.user);
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       
       if (data.user.isRegistered) {
         toast({
