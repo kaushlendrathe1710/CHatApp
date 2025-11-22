@@ -14,14 +14,14 @@ Preferred communication style: Simple, everyday language.
 
 **Framework & Build System:** React 18 with TypeScript, Vite, and Wouter for routing. React Query manages server state.
 **UI Component System:** Shadcn/ui (Radix UI, Tailwind CSS) with custom theming.
-**Real-Time Communication:** WebSocket client with automatic reconnection, supporting various message types and conversation-based room subscriptions. WebRTC for voice/video calls.
-**State Management Strategy:** React Query for API data, local component state, and WebSocket messages for cache invalidation.
+**Real-Time Communication:** Socket.IO client (v4.8.1) loaded via browser-served bundle (`/socket.io/socket.io.js`) to avoid Node.js polyfill issues with Vite. Automatic reconnection with websocket+polling fallback. WebRTC for voice/video calls.
+**State Management Strategy:** React Query for API data, local component state, and Socket.IO events for real-time cache invalidation.
 
 ### Backend Architecture
 
-**Server Framework:** Express.js with TypeScript for REST APIs and a co-located WebSocket server.
+**Server Framework:** Express.js with TypeScript for REST APIs and co-located Socket.IO server.
 **Authentication & Session Management:** Passwordless email/OTP authentication using Nodemailer. Session-based authentication with PostgreSQL for storage, 7-day cookie expiry.
-**WebSocket Architecture:** Manages client connections via `Map<conversationId, Set<WebSocket>>` for efficient message broadcasting.
+**Socket.IO Architecture:** Server at path `/socket.io` using rooms for conversation-based broadcasting. Clients join rooms via `socket.join(conversationId)` and server broadcasts with `io.to(conversationId).emit()`. Tracks online users in a Set for presence broadcasting.
 **API Design:** RESTful API with `isAuthenticated` middleware, Zod schema validation, and standardized error handling.
 
 ### Data Storage Solutions
@@ -37,7 +37,7 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 ### Technical Implementations
 
 - **Authentication:** Passwordless email/OTP using Nodemailer with bcrypt hashing and rate limiting.
-- **Real-time Features:** True real-time messaging via WebSocket with server-side ping/pong heartbeat (30-second intervals) to maintain persistent connections. Polling completely removed in favor of WebSocket-only message delivery. Typing indicators and presence broadcasting via WebSocket. Query cache invalidation triggered by WebSocket events for instant UI updates.
+- **Real-time Features:** True real-time messaging via Socket.IO (v4.8.1) using browser-served bundle to bypass Vite polyfill requirements. Automatic reconnection with websocket+polling fallback transports. Socket.IO rooms for conversation isolation. Polling completely removed in favor of Socket.IO-only message delivery. Typing indicators and presence broadcasting via Socket.IO events. React Query cache invalidation triggered by Socket.IO events (`message`, `typing`, `presence`, `status_update`, etc.) for instant UI updates without page refresh.
 - **Media Handling:** AWS S3 integration for media files using presigned URLs for secure uploads and downloads. Metadata stored as separate .metadata.json files for ACL policies (owner, visibility). Upload flow: request presigned URL → upload to S3 → set ACL metadata → create photo/message. Download flow: request file via /objects/* → verify permissions → stream from S3.
 - **Encryption:** End-to-end encryption for direct messages using RSA keys stored per conversation-user pair.
 - **Privacy Controls:** User-level privacy settings for profile visibility, last seen, and online status.

@@ -40,7 +40,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.set("trust proxy", 1);
-  app.use(session({
+  const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
     resave: false,
@@ -51,7 +51,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sameSite: 'lax', // CSRF protection
       maxAge: sessionTtl,
     },
-  }));
+  });
+  
+  app.use(sessionMiddleware);
 
   // Auth routes
   setupAuth(app);
@@ -1257,32 +1259,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   console.log('[Socket.IO] Server initialized');
 
-  io.on('connection', (socket) => {
-    console.log('[Socket.IO] Client connected:', socket.id);
+  // Authenticate Socket.IO connections using session
+  io.use((socket, next) => {
+    const req = socket.request as any;
+    const res = {} as any;
     
-    let userId: string | undefined;
+    sessionMiddleware(req, res, (err?: any) => {
+      if (err) {
+        console.error('[Socket.IO] Session middleware error:', err);
+        return next(new Error('Session error'));
+      }
+
+      const userId = req.session?.userId;
+
+      if (!userId) {
+        console.warn('[Socket.IO] Unauthenticated connection attempt');
+        return next(new Error('Unauthorized'));
+      }
+
+      // Store authenticated userId in socket data
+      socket.data.userId = userId;
+      console.log('[Socket.IO] Authenticated socket for user:', userId);
+      next();
+    });
+  });
+
+  io.on('connection', (socket) => {
+    const userId = socket.data.userId;
+    onlineUsers.add(userId);
+
+    console.log('[Socket.IO] Client connected:', socket.id, 'User:', userId);
+    
     let userConversations: string[] = [];
 
-    // Handle joining conversations
-    socket.on('join_conversations', ({ conversationIds, userId: uid }: { conversationIds: string[], userId: string }) => {
-      userId = uid;
-      
-      if (userId) {
-        onlineUsers.add(userId);
-      }
+    // Handle joining conversations with authorization
+    socket.on('join_conversations', async ({ conversationIds }: { conversationIds: string[] }) => {
+      const authenticatedUserId = socket.data.userId;
 
       // Leave old conversations
       userConversations.forEach((convId) => {
         socket.leave(convId);
       });
 
-      // Join new conversations
-      conversationIds.forEach((convId) => {
-        socket.join(convId);
-      });
+      // Only join conversations where user is a participant
+      const authorizedConversations: string[] = [];
+      for (const convId of conversationIds) {
+        try {
+          const conversation = await storage.getConversation(convId);
+          if (!conversation) {
+            continue;
+          }
+          
+          const participant = await storage.getParticipant(convId, authenticatedUserId);
+          if (participant) {
+            socket.join(convId);
+            authorizedConversations.push(convId);
+          } else {
+            console.warn(`[Socket.IO] User ${authenticatedUserId} attempted to join unauthorized conversation ${convId}`);
+          }
+        } catch (error) {
+          console.error(`[Socket.IO] Error validating conversation ${convId}:`, error);
+        }
+      }
 
-      userConversations = conversationIds;
+      userConversations = authorizedConversations;
       broadcastPresenceUpdate();
+    });
+
+    // Handle incoming messages via Socket.IO for instant delivery
+    socket.on('send_message', async (data: {
+      conversationId: string;
+      content?: string;
+      type?: string;
+      fileUrl?: string;
+      fileName?: string;
+      fileSize?: number;
+      mediaObjectKey?: string;
+      mimeType?: string;
+      replyToId?: string;
+    }) => {
+      try {
+        const authenticatedUserId = socket.data.userId;
+
+        const { conversationId, content, type, fileUrl, fileName, fileSize, mediaObjectKey, mimeType, replyToId } = data;
+
+        const conversation = await storage.getConversation(conversationId);
+        if (!conversation) {
+          socket.emit('error', { message: 'Conversation not found' });
+          return;
+        }
+
+        const participant = await storage.getParticipant(conversationId, authenticatedUserId);
+        if (!participant) {
+          socket.emit('error', { message: 'Not a member of this conversation' });
+          return;
+        }
+
+        if (conversation.type === 'broadcast' || conversation.isBroadcast) {
+          const canSend = await storage.canSendToBroadcast(conversationId, authenticatedUserId);
+          if (!canSend) {
+            socket.emit('error', { message: 'Only admins can post to broadcast channels' });
+            return;
+          }
+        }
+
+        let expiresAt: Date | null = null;
+        if (conversation?.disappearingMessagesTimer && conversation.disappearingMessagesTimer > 0) {
+          const timerMs = Number(conversation.disappearingMessagesTimer);
+          expiresAt = new Date(Date.now() + timerMs);
+        }
+
+        const message = await storage.createMessage({
+          conversationId,
+          senderId: authenticatedUserId,
+          content,
+          type: type || 'text',
+          fileUrl,
+          fileName,
+          fileSize,
+          mediaObjectKey,
+          mimeType,
+          replyToId,
+          expiresAt,
+        });
+
+        const socketsInRoom = await io.in(conversationId).fetchSockets();
+        const hasRecipientOnline = socketsInRoom.length > 0;
+        
+        if (hasRecipientOnline) {
+          await storage.updateMessageStatus(message.id, 'delivered');
+          io.to(conversationId).emit('status_update', {
+            conversationId,
+            messageId: message.id,
+            status: 'delivered',
+            userId: authenticatedUserId,
+          });
+        }
+
+        io.to(conversationId).emit('message', { ...message, conversationId });
+      } catch (error) {
+        console.error('[Socket.IO] Error sending message:', error);
+        socket.emit('error', { message: 'Failed to send message' });
+      }
     });
 
     // Handle typing indicator
@@ -1304,9 +1422,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     socket.on('disconnect', () => {
-      console.log('[Socket.IO] Client disconnected:', socket.id);
-      if (userId) {
-        onlineUsers.delete(userId);
+      const authenticatedUserId = socket.data.userId;
+      console.log('[Socket.IO] Client disconnected:', socket.id, 'User:', authenticatedUserId);
+      if (authenticatedUserId) {
+        onlineUsers.delete(authenticatedUserId);
       }
       broadcastPresenceUpdate();
     });

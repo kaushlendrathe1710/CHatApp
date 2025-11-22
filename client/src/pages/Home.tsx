@@ -302,7 +302,7 @@ export default function Home() {
     }
   }, [selectedConversationId, encryptionKeys]);
 
-  // Send message mutation
+  // Send message mutation using Socket.IO for instant delivery
   const sendMessageMutation = useMutation({
     mutationFn: async ({
       content,
@@ -325,6 +325,24 @@ export default function Home() {
       replyToId?: string;
       isEncrypted?: boolean;
     }) => {
+      if (wsConnected && sendWsMessage) {
+        sendWsMessage({
+          type: 'send_message',
+          data: {
+            conversationId: selectedConversationId,
+            content,
+            fileUrl,
+            fileName,
+            fileSize,
+            mediaObjectKey,
+            mimeType,
+            type: type || "text",
+            replyToId,
+          },
+        });
+        return Promise.resolve();
+      }
+      
       return apiRequest("POST", "/api/messages", {
         conversationId: selectedConversationId,
         content,

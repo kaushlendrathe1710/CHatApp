@@ -87,6 +87,7 @@ export interface IStorage {
   // Group chat operations
   createGroup(name: string, description: string | undefined, avatarUrl: string | undefined, createdBy: string, participantIds: string[]): Promise<Conversation>;
   getGroupParticipants(conversationId: string): Promise<(ConversationParticipant & { user: User })[]>;
+  getParticipant(conversationId: string, userId: string): Promise<ConversationParticipant | undefined>;
   addGroupParticipant(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void>;
   removeGroupParticipant(conversationId: string, userId: string): Promise<void>;
   updateParticipantRole(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void>;
@@ -796,6 +797,20 @@ export class DatabaseStorage implements IStorage {
       ...p.conversation_participants,
       user: p.users!,
     }));
+  }
+
+  async getParticipant(conversationId: string, userId: string): Promise<ConversationParticipant | undefined> {
+    const [participant] = await db
+      .select()
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conversationId),
+          eq(conversationParticipants.userId, userId)
+        )
+      );
+
+    return participant;
   }
 
   async addGroupParticipant(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void> {
