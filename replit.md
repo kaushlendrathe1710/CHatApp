@@ -48,6 +48,7 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 - **Delete Conversation:** User-scoped conversation deletion that removes the user's participation while preserving the conversation for other participants (WhatsApp-like "delete for me" behavior).
 - **Unread Count Badge:** Instantly clears when opening a conversation. Frontend invalidates conversation list 300ms after opening to sync with backend's read status update.
 - **Sidebar Visibility:** Enhanced sidebar with explicit border and background colors for better visibility on desktop. Chat history is fully scrollable with proper overflow handling.
+- **Voice Messaging:** WhatsApp-style voice messages with professional recording and playback UI. Features include: (1) VoiceRecorder component with MediaRecorder API, real-time waveform visualization, recording timer, stop/send/cancel/delete controls, and promise-based blob handling to prevent race conditions on rapid send clicks, (2) AudioPlayer component with custom waveform visualization, play/pause controls, seekable waveform bars, and duration display in mm:ss format, (3) MessageComposer integration with microphone button that switches to send icon when text is present, (4) S3 upload flow using existing infrastructure with WebM/Opus audio format, (5) Proper AudioContext cleanup to prevent "Cannot close a closed AudioContext" errors.
 
 ## External Dependencies
 
