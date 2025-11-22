@@ -42,7 +42,8 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 - **Encryption:** End-to-end encryption for direct messages using RSA keys stored per conversation-user pair.
 - **Privacy Controls:** User-level privacy settings for profile visibility, last seen, and online status.
 - **Role-Based Access:** `user`, `admin`, `super_admin` roles control visibility and conversation creation.
-- **WhatsApp-Like Messaging:** Visual read receipts (single, double gray, green ticks), copy/delete message functionality, online/offline presence broadcasting, and camera integration for photo capture.
+- **WhatsApp-Like Messaging:** Visual read receipts (single, double gray, green ticks), copy/delete message functionality, online/offline presence broadcasting, camera integration for photo capture, and delete entire chat option.
+- **Delete Conversation:** User-scoped conversation deletion that removes the user's participation while preserving the conversation for other participants (WhatsApp-like "delete for me" behavior).
 
 ## External Dependencies
 
@@ -54,7 +55,7 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 **API Endpoints:**
 - **Authentication:** `/api/auth/*`
 - **Users:** `/api/users`, `/api/users/discoverable`, `/api/users/:userId/can-view`, `/api/users/privacy`
-- **Conversations:** `/api/conversations`, `/api/conversations/:id/settings`
+- **Conversations:** `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/settings`
 - **Messages:** `/api/messages/:conversationId`, `/api/messages`, `/api/messages/:id/forward`, `/api/messages/:id/reactions`, `/api/messages/upload-url`
 - **Broadcast Channels:** `/api/broadcast/create`, `/api/broadcast/:channelId/subscribe`
 - **Encryption:** `/api/encryption/keys`, `/api/encryption/keys/:conversationId`
