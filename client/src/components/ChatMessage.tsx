@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import { decryptMessage } from "@/lib/encryption";
 import type { MessageWithSender } from "@shared/schema";
-import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock, Shield, ShieldAlert, Copy, Trash2 } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock, Shield, ShieldAlert, Copy, Trash2, CheckSquare, Square } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { MessageReactions } from "@/components/MessageReactions";
@@ -35,6 +35,10 @@ interface ChatMessageProps {
   onEditContentChange?: (content: string) => void;
   onSaveEdit?: () => void;
   onCancelEdit?: () => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
+  onEnterSelectionMode?: () => void;
 }
 
 export function ChatMessage({ 
@@ -54,7 +58,11 @@ export function ChatMessage({
   editContent = '',
   onEditContentChange,
   onSaveEdit,
-  onCancelEdit
+  onCancelEdit,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+  onEnterSelectionMode
 }: ChatMessageProps) {
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
   const [decryptionError, setDecryptionError] = useState(false);
@@ -273,14 +281,36 @@ export function ChatMessage({
     <div 
       className={`flex gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} items-end`}
       data-testid={`message-${message.id}`}
+      onClick={() => isSelectionMode && onToggleSelect && onToggleSelect()}
     >
-      {showAvatar && !isOwn && (
+      {/* Checkbox for selection mode */}
+      {isSelectionMode && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect && onToggleSelect();
+          }}
+          data-testid={`checkbox-select-${message.id}`}
+        >
+          {isSelected ? (
+            <CheckSquare className="h-5 w-5 text-primary" />
+          ) : (
+            <Square className="h-5 w-5" />
+          )}
+        </Button>
+      )}
+      
+      {/* Avatar (show only when not in selection mode) */}
+      {!isSelectionMode && showAvatar && !isOwn && (
         <Avatar className="h-8 w-8 flex-shrink-0" data-testid={`avatar-${message.senderId}`}>
           <AvatarImage src={message.sender.profileImageUrl || undefined} style={{ objectFit: 'cover' }} />
           <AvatarFallback className="text-xs">{initials}</AvatarFallback>
         </Avatar>
       )}
-      {showAvatar && isOwn && <div className="h-8 w-8 flex-shrink-0" />}
+      {!isSelectionMode && showAvatar && isOwn && <div className="h-8 w-8 flex-shrink-0" />}
       
       <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[65%] gap-1`}>
         {isGroup && !isOwn && showAvatar && (
@@ -341,6 +371,12 @@ export function ChatMessage({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align={isOwn ? "end" : "start"}>
+              {onEnterSelectionMode && !isSelectionMode && (
+                <DropdownMenuItem onClick={() => onEnterSelectionMode()} data-testid={`menu-select-${message.id}`}>
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  Select
+                </DropdownMenuItem>
+              )}
               {message.content && (
                 <DropdownMenuItem onClick={handleCopyMessage} data-testid={`menu-copy-${message.id}`}>
                   <Copy className="h-4 w-4 mr-2" />
