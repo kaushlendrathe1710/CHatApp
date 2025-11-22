@@ -37,7 +37,7 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 ### Technical Implementations
 
 - **Authentication:** Passwordless email/OTP using Nodemailer with bcrypt hashing and rate limiting.
-- **Real-time Features:** Automatic conversation list updates via 10-second polling (TanStack Query `refetchInterval`). WebSocket infrastructure present but non-functional due to Replit proxy blocking upgrade requests. In-conversation messaging uses WebSocket for typing indicators and message delivery where WebSocket connections succeed.
+- **Real-time Features:** Fast polling for real-time feel: conversation list updates every 3 seconds, in-conversation messages poll every 2 seconds (TanStack Query `refetchInterval`). WebSocket infrastructure present for typing indicators and presence broadcasting, but message delivery relies on polling due to unstable WebSocket connections on Replit infrastructure (connections succeed but disconnect immediately).
 - **Media Handling:** AWS S3 integration for media files using presigned URLs for secure uploads and downloads. Metadata stored as separate .metadata.json files for ACL policies (owner, visibility). Upload flow: request presigned URL → upload to S3 → set ACL metadata → create photo/message. Download flow: request file via /objects/* → verify permissions → stream from S3.
 - **Encryption:** End-to-end encryption for direct messages using RSA keys stored per conversation-user pair.
 - **Privacy Controls:** User-level privacy settings for profile visibility, last seen, and online status.

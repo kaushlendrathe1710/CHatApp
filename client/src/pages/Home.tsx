@@ -137,8 +137,8 @@ export default function Home() {
     useQuery<ConversationWithDetails[]>({
       queryKey: ["/api/conversations"],
       enabled: !!user,
-      // Poll every 10 seconds as fallback if WebSocket fails
-      refetchInterval: 10000,
+      // Poll every 3 seconds for real-time conversation list updates
+      refetchInterval: 3000,
     });
 
   // WebSocket connection with error handling
@@ -256,6 +256,8 @@ export default function Home() {
   >({
     queryKey: ["/api/messages", selectedConversationId],
     enabled: !!selectedConversationId,
+    // Poll every 2 seconds for real-time feel
+    refetchInterval: 2000,
   });
 
   // When a conversation is opened, invalidate conversations list after a short delay
