@@ -1,5 +1,6 @@
 import { File, Download, Image as ImageIcon, Video, FileText, Music, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AudioPlayer } from "./AudioPlayer";
 import { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
@@ -117,29 +118,11 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
     );
   }
 
-  // Audio preview
+  // Audio preview - Voice Message Player
   if (type === 'audio') {
     return (
-      <div className="max-w-sm" data-testid="preview-audio">
-        <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-          <Music className="h-8 w-8 text-green-500" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate" data-testid="text-audio-name">{fileName}</p>
-            {fileSize && (
-              <p className="text-xs text-muted-foreground" data-testid="text-audio-size">
-                {formatFileSize(fileSize)}
-              </p>
-            )}
-          </div>
-        </div>
-        <audio
-          src={fileUrl}
-          controls
-          className="w-full mt-2"
-          data-testid="audio-message-attachment"
-        >
-          Your browser does not support the audio tag.
-        </audio>
+      <div className="max-w-md" data-testid="preview-audio">
+        <AudioPlayer audioUrl={fileUrl} />
       </div>
     );
   }

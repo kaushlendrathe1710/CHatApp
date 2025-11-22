@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Smile, X, Camera, Image as ImageIcon, FileText, Reply } from "lucide-react";
+import { Paperclip, Send, Smile, X, Camera, Image as ImageIcon, FileText, Reply, Mic } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -17,6 +17,7 @@ import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import type { MessageWithSender } from "@shared/schema";
 import { FileAttachmentUploader } from "./FileAttachmentUploader";
 import { CameraCapture } from "./CameraCapture";
+import { VoiceRecorder } from "./VoiceRecorder";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -52,6 +53,7 @@ export const MessageComposer = React.memo(function MessageComposer({
   const [message, setMessage] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [voiceRecording, setVoiceRecording] = useState(false);
   const [focusAfterSend, setFocusAfterSend] = useState(false);
   const [pendingFileData, setPendingFileData] = useState<{
     fileUrl: string;
@@ -242,6 +244,99 @@ export const MessageComposer = React.memo(function MessageComposer({
     }
   };
 
+  const handleVoiceRecordComplete = async (audioBlob: Blob, duration: number) => {
+    try {
+      // Create file from blob
+      const fileName = `voice-message-${Date.now()}.webm`;
+      const file = new File([audioBlob], fileName, { type: audioBlob.type });
+
+      // Get signed upload URL from server
+      const response = await apiRequest(
+        "POST",
+        "/api/messages/upload-url",
+        {
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+        }
+      );
+      const uploadResponse = await response.json() as { uploadURL: string; objectKey: string };
+
+      // Upload to S3 using signed URL
+      const uploadResult = await fetch(uploadResponse.uploadURL, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+        },
+        body: file,
+      });
+
+      if (!uploadResult.ok) {
+        throw new Error(`Failed to upload voice message`);
+      }
+
+      // Set file metadata to public and get the public objectPath
+      const metadataResponse = await fetch("/api/objects/metadata", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          fileUrl: uploadResponse.objectKey,
+        }),
+      });
+
+      if (!metadataResponse.ok) {
+        const errorData = await metadataResponse.json();
+        throw new Error(errorData.error || "Failed to set file metadata");
+      }
+
+      const { objectPath } = await metadataResponse.json();
+
+      // Send the voice message
+      onSendMessage("", {
+        fileUrl: objectPath,
+        fileName: file.name,
+        fileSize: file.size,
+        mediaObjectKey: uploadResponse.objectKey,
+        mimeType: file.type,
+        type: "audio",
+      });
+
+      setVoiceRecording(false);
+
+      toast({
+        title: "Voice Message Sent",
+        description: `${duration}s recording sent successfully`,
+      });
+
+    } catch (error) {
+      console.error("Error uploading voice message:", error);
+      toast({
+        title: "Upload Failed",
+        description:
+          error instanceof Error ? error.message : "Failed to upload voice message",
+        variant: "destructive",
+      });
+      setVoiceRecording(false);
+    }
+  };
+
+  const handleCancelVoiceRecording = () => {
+    setVoiceRecording(false);
+  };
+
+  // Show voice recorder if recording
+  if (voiceRecording) {
+    return (
+      <VoiceRecorder
+        onRecordComplete={handleVoiceRecordComplete}
+        onCancel={handleCancelVoiceRecording}
+      />
+    );
+  }
+
   return (
     <div className="border-t bg-background p-4">
       {replyToMessage && (
@@ -374,15 +469,29 @@ export const MessageComposer = React.memo(function MessageComposer({
           />
         </div>
 
-        <Button
-          size="icon"
-          onClick={handleSend}
-          disabled={(!message.trim() && !pendingFileData) || disabled}
-          className="flex-shrink-0"
-          data-testid="button-send"
-        >
-          <Send className="h-5 w-5" />
-        </Button>
+        {/* Show microphone button when no text, otherwise show send button */}
+        {!message.trim() && !pendingFileData ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setVoiceRecording(true)}
+            disabled={disabled}
+            className="flex-shrink-0"
+            data-testid="button-voice-record"
+          >
+            <Mic className="h-5 w-5" />
+          </Button>
+        ) : (
+          <Button
+            size="icon"
+            onClick={handleSend}
+            disabled={(!message.trim() && !pendingFileData) || disabled}
+            className="flex-shrink-0"
+            data-testid="button-send"
+          >
+            <Send className="h-5 w-5" />
+          </Button>
+        )}
       </div>
 
       <CameraCapture
