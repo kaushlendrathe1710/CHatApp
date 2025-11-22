@@ -261,97 +261,101 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrCreateDirectConversation(userId1: string, userId2: string): Promise<Conversation> {
-    const existingConvs = await db
-      .select({ conversationId: conversationParticipants.conversationId })
-      .from(conversationParticipants)
-      .where(eq(conversationParticipants.userId, userId1))
-      .groupBy(conversationParticipants.conversationId)
-      .having(sql`count(*) = 2`);
+    // Sort user IDs for deterministic ordering
+    const [minUserId, maxUserId] = [userId1, userId2].sort();
+    
+    // Create a deterministic lock key from sorted user IDs
+    // Use simple hash: convert to numbers and combine
+    const lockKey = this.generateLockKey(minUserId, maxUserId);
+    
+    // Use transaction with advisory lock to prevent race conditions
+    return await db.transaction(async (tx) => {
+      // Acquire advisory lock for this user pair
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${lockKey})`);
+      
+      // Check for existing conversation (protected by lock)
+      const result = await tx
+        .select({
+          conversation: conversations,
+        })
+        .from(conversations)
+        .innerJoin(
+          conversationParticipants,
+          eq(conversations.id, conversationParticipants.conversationId)
+        )
+        .where(eq(conversations.isGroup, false))
+        .groupBy(conversations.id)
+        .having(
+          and(
+            sql`COUNT(DISTINCT ${conversationParticipants.userId}) = 2`,
+            sql`MIN(${conversationParticipants.userId}) = ${minUserId}`,
+            sql`MAX(${conversationParticipants.userId}) = ${maxUserId}`
+          )
+        );
 
-    for (const { conversationId } of existingConvs) {
-      const participants = await db
-        .select()
-        .from(conversationParticipants)
-        .where(eq(conversationParticipants.conversationId, conversationId));
-
-      const userIds = participants.map(p => p.userId).sort();
-      if (userIds.length === 2 && userIds[0] === userId1 && userIds[1] === userId2) {
-        const [conv] = await db
-          .select()
-          .from(conversations)
-          .where(and(
-            eq(conversations.id, conversationId),
-            eq(conversations.isGroup, false)
-          ));
-        if (conv) return conv;
+      if (result.length > 0) {
+        return result[0].conversation;
       }
-    }
 
-    const newConv = await this.createConversation({ isGroup: false });
-    await this.addConversationParticipants([
-      { conversationId: newConv.id, userId: userId1 },
-      { conversationId: newConv.id, userId: userId2 },
-    ]);
-    return newConv;
+      // Create new conversation if none exists
+      const [newConv] = await tx
+        .insert(conversations)
+        .values({ isGroup: false })
+        .returning();
+
+      await tx.insert(conversationParticipants).values([
+        { conversationId: newConv.id, userId: userId1 },
+        { conversationId: newConv.id, userId: userId2 },
+      ]);
+
+      return newConv;
+    });
+    // Lock is automatically released when transaction commits/rolls back
+  }
+
+  private generateLockKey(userId1: string, userId2: string): number {
+    // Generate a deterministic integer lock key from two user IDs
+    // Use a simple hash combining the two sorted IDs
+    const combined = `${userId1}:${userId2}`;
+    let hash = 0;
+    for (let i = 0; i < combined.length; i++) {
+      const char = combined.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    // Ensure positive integer for pg_advisory_xact_lock
+    return Math.abs(hash);
   }
 
   async findDirectConversation(userId1: string, userId2: string): Promise<Conversation | undefined> {
-    // Get conversation IDs where userId1 is a participant
-    const user1Convs = await db
-      .select({ conversationId: conversationParticipants.conversationId })
-      .from(conversationParticipants)
-      .where(eq(conversationParticipants.userId, userId1));
+    // Sort user IDs for deterministic ordering
+    const [minUserId, maxUserId] = [userId1, userId2].sort();
 
-    if (user1Convs.length === 0) return undefined;
+    // Find conversations where BOTH specific users are participants
+    // Using MIN/MAX to ensure exact membership
+    const result = await db
+      .select({
+        conversation: conversations,
+        minUser: sql<string>`MIN(${conversationParticipants.userId})`.as('min_user'),
+        maxUser: sql<string>`MAX(${conversationParticipants.userId})`.as('max_user'),
+        participantCount: sql<number>`COUNT(DISTINCT ${conversationParticipants.userId})`.as('participant_count'),
+      })
+      .from(conversations)
+      .innerJoin(
+        conversationParticipants,
+        eq(conversations.id, conversationParticipants.conversationId)
+      )
+      .where(eq(conversations.isGroup, false))
+      .groupBy(conversations.id)
+      .having(
+        and(
+          sql`COUNT(DISTINCT ${conversationParticipants.userId}) = 2`,
+          sql`MIN(${conversationParticipants.userId}) = ${minUserId}`,
+          sql`MAX(${conversationParticipants.userId}) = ${maxUserId}`
+        )
+      );
 
-    // Get conversation IDs where userId2 is a participant
-    const user2Convs = await db
-      .select({ conversationId: conversationParticipants.conversationId })
-      .from(conversationParticipants)
-      .where(eq(conversationParticipants.userId, userId2));
-
-    if (user2Convs.length === 0) return undefined;
-
-    // Find intersection - conversations where BOTH users participate
-    const user1ConvIds = new Set(user1Convs.map(c => c.conversationId));
-    const commonConvIds = user2Convs
-      .map(c => c.conversationId)
-      .filter(id => user1ConvIds.has(id));
-
-    if (commonConvIds.length === 0) return undefined;
-
-    // For each common conversation, verify it's a direct chat with exactly these two users
-    for (const conversationId of commonConvIds) {
-      // Fetch conversation - must be direct (non-group)
-      const [conv] = await db
-        .select()
-        .from(conversations)
-        .where(and(
-          eq(conversations.id, conversationId),
-          eq(conversations.isGroup, false)
-        ));
-
-      if (!conv) continue;
-
-      // Get all participants for this conversation
-      const participants = await db
-        .select()
-        .from(conversationParticipants)
-        .where(eq(conversationParticipants.conversationId, conversationId));
-
-      // Must have exactly 2 participants
-      if (participants.length !== 2) continue;
-
-      // Verify the two participants are exactly userId1 and userId2
-      const participantIds = participants.map(p => p.userId).sort();
-      const targetIds = [userId1, userId2].sort();
-      
-      if (participantIds[0] === targetIds[0] && participantIds[1] === targetIds[1]) {
-        return conv;  // Found exact match!
-      }
-    }
-
-    return undefined;
+    return result.length > 0 ? result[0].conversation : undefined;
   }
 
   async deleteConversationParticipation(conversationId: string, userId: string): Promise<void> {
