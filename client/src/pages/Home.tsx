@@ -588,6 +588,29 @@ export default function Home() {
     setForwardDialogOpen(true);
   };
 
+  const handleDelete = async (message: MessageWithSender) => {
+    try {
+      await apiRequest("DELETE", `/api/messages/${message.id}`);
+      queryClient.invalidateQueries({
+        queryKey: ["/api/messages", selectedConversationId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/conversations"],
+      });
+      toast({
+        title: "Message deleted",
+        description: "The message has been deleted",
+      });
+    } catch (error) {
+      console.error("Failed to delete message:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete message",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleUpdateDisappearingTimer = async (timerMs: number) => {
     if (!selectedConversationId) return;
 
@@ -1145,6 +1168,7 @@ export default function Home() {
                             onReply={handleReply}
                             onEdit={handleEdit}
                             onForward={handleForward}
+                            onDelete={handleDelete}
                             isEditing={editingMessageId === message.id}
                             editContent={editContent}
                             onEditContentChange={setEditContent}
