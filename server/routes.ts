@@ -164,6 +164,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get message file upload URL with objectKey
+  app.post('/api/messages/upload-url', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      
+      // Normalize the full signed URL to get canonical /objects/... key
+      const objectKey = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      
+      res.json({ uploadURL, objectKey });
+    } catch (error) {
+      console.error("Error generating message upload URL:", error);
+      res.status(500).json({ message: "Failed to generate upload URL" });
+    }
+  });
+
   // Photo validation schema - now requires objectKey
   const createPhotoSchema = z.object({
     objectKey: z.string().min(1, "Object key is required"),
@@ -621,7 +637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/messages', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { conversationId, content, type, fileUrl, fileName, fileSize, replyToId } = req.body;
+      const { conversationId, content, type, fileUrl, fileName, fileSize, mediaObjectKey, mimeType, replyToId } = req.body;
 
       if (!conversationId) {
         return res.status(400).json({ message: "conversationId is required" });
@@ -651,6 +667,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileUrl,
         fileName,
         fileSize,
+        mediaObjectKey,
+        mimeType,
         replyToId,
         expiresAt,
       });
