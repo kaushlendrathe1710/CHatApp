@@ -160,6 +160,7 @@ export const MessageComposer = React.memo(function MessageComposer({
       }
 
       // Set file metadata to public and get the public objectPath
+      console.log("Setting metadata for objectKey:", uploadResponse.objectKey);
       const metadataResponse = await fetch("/api/objects/metadata", {
         method: "PUT",
         headers: {
@@ -172,7 +173,9 @@ export const MessageComposer = React.memo(function MessageComposer({
       });
 
       if (!metadataResponse.ok) {
-        throw new Error("Failed to set file metadata");
+        const errorData = await metadataResponse.json();
+        console.error("Metadata error response:", errorData);
+        throw new Error(errorData.error || "Failed to set file metadata");
       }
 
       const { objectPath } = await metadataResponse.json();
