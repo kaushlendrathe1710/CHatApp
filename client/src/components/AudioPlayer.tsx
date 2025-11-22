@@ -47,7 +47,7 @@ export function AudioPlayer({ audioUrl, duration, className }: AudioPlayerProps)
     return () => {
       audio.pause();
       audio.remove();
-      if (audioContextRef.current) {
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
       if (animationFrameRef.current) {

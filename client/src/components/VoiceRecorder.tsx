@@ -14,6 +14,7 @@ export function VoiceRecorder({ onRecordComplete, onCancel }: VoiceRecorderProps
   const [duration, setDuration] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [waveformData, setWaveformData] = useState<number[]>(new Array(40).fill(0));
+  const [isSending, setIsSending] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -21,6 +22,8 @@ export function VoiceRecorder({ onRecordComplete, onCancel }: VoiceRecorderProps
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const blobPromiseRef = useRef<Promise<Blob> | null>(null);
+  const blobResolveRef = useRef<((blob: Blob) => void) | null>(null);
 
   useEffect(() => {
     startRecording();
@@ -58,6 +61,13 @@ export function VoiceRecorder({ onRecordComplete, onCancel }: VoiceRecorderProps
         const blob = new Blob(chunksRef.current, { type: mimeType });
         setAudioBlob(blob);
         stream.getTracks().forEach(track => track.stop());
+        
+        // Resolve promise for handleSend if waiting
+        if (blobResolveRef.current) {
+          blobResolveRef.current(blob);
+          blobResolveRef.current = null;
+          blobPromiseRef.current = null;
+        }
       };
       
       mediaRecorderRef.current.start(100); // Collect data every 100ms
@@ -110,6 +120,13 @@ export function VoiceRecorder({ onRecordComplete, onCancel }: VoiceRecorderProps
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      // Create promise for blob if not already created
+      if (!blobPromiseRef.current) {
+        blobPromiseRef.current = new Promise<Blob>((resolve) => {
+          blobResolveRef.current = resolve;
+        });
+      }
+      
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       
@@ -121,23 +138,40 @@ export function VoiceRecorder({ onRecordComplete, onCancel }: VoiceRecorderProps
         cancelAnimationFrame(animationFrameRef.current);
       }
       
-      if (audioContextRef.current) {
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
     }
   };
 
-  const handleSend = () => {
-    if (audioBlob) {
-      onRecordComplete(audioBlob, duration);
-    } else {
-      stopRecording();
-      // Wait for blob to be created
-      setTimeout(() => {
-        if (audioBlob) {
-          onRecordComplete(audioBlob, duration);
+  const handleSend = async () => {
+    setIsSending(true);
+    
+    try {
+      let blob: Blob;
+      
+      if (audioBlob) {
+        // Blob already available
+        blob = audioBlob;
+      } else {
+        // Need to wait for blob
+        if (isRecording) {
+          stopRecording();
         }
-      }, 100);
+        
+        // Wait for the promise created in stopRecording
+        if (blobPromiseRef.current) {
+          blob = await blobPromiseRef.current;
+        } else {
+          // Should never happen, but handle gracefully
+          console.error("No blob or promise available");
+          return;
+        }
+      }
+      
+      onRecordComplete(blob, duration);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -165,7 +199,7 @@ export function VoiceRecorder({ onRecordComplete, onCancel }: VoiceRecorderProps
       cancelAnimationFrame(animationFrameRef.current);
     }
     
-    if (audioContextRef.current) {
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close();
     }
     
@@ -253,6 +287,7 @@ export function VoiceRecorder({ onRecordComplete, onCancel }: VoiceRecorderProps
           variant="ghost"
           size="icon"
           onClick={handleSend}
+          disabled={isSending}
           className="text-primary"
           data-testid="button-send-recording"
         >
