@@ -64,12 +64,18 @@ export function MessageComposer({
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
-      // Use setTimeout to ensure focus happens after any re-renders
+      // Use multiple focus attempts to ensure it works after all re-renders
+      // Immediate focus
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+      // Delayed focus to catch any late re-renders
       setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-        }
-      }, 0);
+        textareaRef.current?.focus();
+      }, 50);
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
     }
   };
 
