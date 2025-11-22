@@ -132,10 +132,12 @@ export const messages = pgTable("messages", {
   conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: 'cascade' }).notNull(),
   senderId: varchar("sender_id").references(() => users.id).notNull(),
   content: text("content"),
-  type: text("type").default("text").notNull(), // text, image, file, call
+  type: text("type").default("text").notNull(), // text, image, video, document, audio, file, call
   fileUrl: varchar("file_url"),
   fileName: varchar("file_name"),
   fileSize: integer("file_size"),
+  mediaObjectKey: varchar("media_object_key"), // Object storage reference
+  mimeType: varchar("mime_type"), // e.g., image/jpeg, video/mp4, application/pdf
   status: text("status").default("sent").notNull(), // sent, delivered, read
   replyToId: varchar("reply_to_id").references((): any => messages.id),
   isEdited: boolean("is_edited").default(false),
