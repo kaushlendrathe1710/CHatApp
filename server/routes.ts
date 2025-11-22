@@ -1093,21 +1093,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Broadcast typing indicator
           broadcastToConversation(message.data.conversationId, message);
         } else if (message.type === 'join_conversations') {
-          // Track which conversations this client is part of
-          userConversations = message.data.conversationIds || [];
+          const newConversationIds = message.data.conversationIds || [];
           const userId = message.data.userId;
           
           // Track user ID for this WebSocket
           if (userId) {
             wsUserMap.set(ws, userId);
           }
-          
-          userConversations.forEach(convId => {
-            if (!wsClients.has(convId)) {
-              wsClients.set(convId, new Set());
-            }
-            wsClients.get(convId)!.add(ws);
-          });
+
+          // Only update subscriptions if we have a valid conversation list
+          if (newConversationIds.length > 0 || userConversations.length > 0) {
+            // Calculate which conversations to remove (in old but not in new)
+            const oldSet = new Set(userConversations);
+            const newSet = new Set(newConversationIds);
+            
+            const toRemove = userConversations.filter(convId => !newSet.has(convId));
+            const toAdd = newConversationIds.filter(convId => !oldSet.has(convId));
+            
+            // Remove from old conversations
+            toRemove.forEach(convId => {
+              const clients = wsClients.get(convId);
+              if (clients) {
+                clients.delete(ws);
+                if (clients.size === 0) {
+                  wsClients.delete(convId);
+                }
+              }
+            });
+            
+            // Add to new conversations
+            toAdd.forEach(convId => {
+              if (!wsClients.has(convId)) {
+                wsClients.set(convId, new Set());
+              }
+              wsClients.get(convId)!.add(ws);
+            });
+            
+            // Update the tracked conversation list
+            userConversations = newConversationIds;
+          }
 
           // Broadcast presence update to notify everyone this user is now online
           broadcastPresenceUpdate();
