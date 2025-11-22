@@ -84,6 +84,14 @@ export interface IStorage {
   unsubscribeFromBroadcast(conversationId: string, userId: string): Promise<void>;
   canSendToBroadcast(conversationId: string, userId: string): Promise<boolean>;
   
+  // Group chat operations
+  createGroup(name: string, description: string | undefined, avatarUrl: string | undefined, createdBy: string, participantIds: string[]): Promise<Conversation>;
+  getGroupParticipants(conversationId: string): Promise<(ConversationParticipant & { user: User })[]>;
+  addGroupParticipant(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void>;
+  removeGroupParticipant(conversationId: string, userId: string): Promise<void>;
+  updateParticipantRole(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void>;
+  isGroupAdmin(conversationId: string, userId: string): Promise<boolean>;
+  
   // Privacy operations
   updatePrivacySettings(userId: string, settings: Partial<Pick<User, 'profileVisibility' | 'locationPrivacy' | 'lastSeenVisibility' | 'onlineStatusVisibility'>>): Promise<User>;
   getDiscoverableUsers(currentUserId: string): Promise<User[]>;
@@ -721,6 +729,107 @@ export class DatabaseStorage implements IStorage {
   }
 
   async canSendToBroadcast(conversationId: string, userId: string): Promise<boolean> {
+    const [participant] = await db
+      .select()
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conversationId),
+          eq(conversationParticipants.userId, userId)
+        )
+      );
+
+    return participant?.role === 'admin';
+  }
+
+  // Group chat operations
+  async createGroup(
+    name: string, 
+    description: string | undefined, 
+    avatarUrl: string | undefined, 
+    createdBy: string, 
+    participantIds: string[]
+  ): Promise<Conversation> {
+    const [group] = await db
+      .insert(conversations)
+      .values({
+        name,
+        description,
+        avatarUrl,
+        isGroup: true,
+        isBroadcast: false,
+        createdBy,
+      })
+      .returning();
+
+    // Add creator as admin
+    const participantsToAdd: InsertConversationParticipant[] = [{
+      conversationId: group.id,
+      userId: createdBy,
+      role: 'admin',
+    }];
+
+    // Add other participants as members
+    for (const userId of participantIds) {
+      if (userId !== createdBy) {
+        participantsToAdd.push({
+          conversationId: group.id,
+          userId,
+          role: 'member',
+        });
+      }
+    }
+
+    await db.insert(conversationParticipants).values(participantsToAdd);
+
+    return group;
+  }
+
+  async getGroupParticipants(conversationId: string): Promise<(ConversationParticipant & { user: User })[]> {
+    const participants = await db
+      .select()
+      .from(conversationParticipants)
+      .leftJoin(users, eq(conversationParticipants.userId, users.id))
+      .where(eq(conversationParticipants.conversationId, conversationId));
+
+    return participants.map((p) => ({
+      ...p.conversation_participants,
+      user: p.users!,
+    }));
+  }
+
+  async addGroupParticipant(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void> {
+    await db.insert(conversationParticipants).values({
+      conversationId,
+      userId,
+      role,
+    });
+  }
+
+  async removeGroupParticipant(conversationId: string, userId: string): Promise<void> {
+    await db
+      .delete(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conversationId),
+          eq(conversationParticipants.userId, userId)
+        )
+      );
+  }
+
+  async updateParticipantRole(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void> {
+    await db
+      .update(conversationParticipants)
+      .set({ role })
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conversationId),
+          eq(conversationParticipants.userId, userId)
+        )
+      );
+  }
+
+  async isGroupAdmin(conversationId: string, userId: string): Promise<boolean> {
     const [participant] = await db
       .select()
       .from(conversationParticipants)

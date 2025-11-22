@@ -45,6 +45,8 @@ import { ObjectUploader } from "@/components/ObjectUploader";
 import { ForwardMessageDialog } from "@/components/ForwardMessageDialog";
 import { DisappearingMessagesSettings } from "@/components/DisappearingMessagesSettings";
 import { CreateBroadcastDialog } from "@/components/CreateBroadcastDialog";
+import { CreateGroupDialog } from "@/components/CreateGroupDialog";
+import { GroupSettingsDialog } from "@/components/GroupSettingsDialog";
 import { EncryptionSetupDialog } from "@/components/EncryptionSetupDialog";
 import { VideoCallDialog } from "@/components/VideoCallDialog";
 import { UserDetailsDialog } from "@/components/UserDetailsDialog";
@@ -107,6 +109,8 @@ export default function Home() {
   const [messageToForward, setMessageToForward] =
     useState<MessageWithSender | null>(null);
   const [broadcastDialogOpen, setBroadcastDialogOpen] = useState(false);
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const [groupSettingsDialogOpen, setGroupSettingsDialogOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
@@ -888,15 +892,28 @@ export default function Home() {
             </button>
 
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setBroadcastDialogOpen(true)}
-                data-testid="button-create-broadcast"
-                title="Create Broadcast Channel"
-              >
-                <Radio className="h-5 w-5" />
-              </Button>
+              {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setGroupDialogOpen(true)}
+                    data-testid="button-create-group"
+                    title="Create Group"
+                  >
+                    <Users className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setBroadcastDialogOpen(true)}
+                    data-testid="button-create-broadcast"
+                    title="Create Broadcast Channel"
+                  >
+                    <Radio className="h-5 w-5" />
+                  </Button>
+                </>
+              )}
               <NewConversationDialog
                 users={allUsers}
                 onCreateConversation={createConversationMutation.mutate}
@@ -1176,6 +1193,23 @@ export default function Home() {
                         conversation={selectedConversation}
                         onUpdateTimer={handleUpdateDisappearingTimer}
                       />
+                      {selectedConversation.isGroup && (
+                        user?.role === 'admin' || 
+                        user?.role === 'super_admin' ||
+                        selectedConversation.participants.some(
+                          p => p.userId === user?.id && p.role === 'admin'
+                        )
+                      ) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setGroupSettingsDialogOpen(true)}
+                          data-testid="button-group-settings"
+                          title="Group Settings"
+                        >
+                          <Settings className="h-5 w-5" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1434,6 +1468,27 @@ export default function Home() {
         open={broadcastDialogOpen}
         onOpenChange={setBroadcastDialogOpen}
       />
+
+      <CreateGroupDialog
+        open={groupDialogOpen}
+        onOpenChange={setGroupDialogOpen}
+      />
+
+      {selectedConversation && selectedConversation.isGroup && (
+        <GroupSettingsDialog
+          open={groupSettingsDialogOpen}
+          onOpenChange={setGroupSettingsDialogOpen}
+          conversationId={selectedConversation.id}
+          isAdmin={
+            user?.role === 'admin' || 
+            user?.role === 'super_admin' ||
+            selectedConversation.participants.some(
+              p => p.userId === user?.id && p.role === 'admin'
+            )
+          }
+          currentUserId={user?.id || ""}
+        />
+      )}
 
       <EncryptionSetupDialog
         open={encryptionDialogOpen}

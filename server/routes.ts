@@ -6,7 +6,7 @@ import { setupAuth, isAuthenticated } from "./auth";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { S3StorageService, ObjectNotFoundError, ObjectPermission } from "./s3Storage";
-import { insertConversationSchema, insertMessageSchema } from "@shared/schema";
+import { insertConversationSchema, insertMessageSchema, createGroupSchema, addParticipantSchema, updateParticipantRoleSchema } from "@shared/schema";
 import { z } from "zod";
 
 // WebSocket client tracking
@@ -662,6 +662,205 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting conversation:", error);
       res.status(500).json({ message: "Failed to delete conversation" });
+    }
+  });
+
+  // Create a group (admin only)
+  app.post('/api/conversations/group', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      // Check if user is admin or super_admin
+      if (userRole !== 'admin' && userRole !== 'super_admin') {
+        return res.status(403).json({ message: "Only admins can create groups" });
+      }
+
+      const result = createGroupSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid input", errors: result.error.issues });
+      }
+
+      const { name, description, avatarUrl, participantIds } = result.data;
+
+      // Validate that all participant IDs exist
+      const participants = await storage.getUsersByIds(participantIds);
+      if (participants.length !== participantIds.length) {
+        return res.status(400).json({ message: "One or more participant IDs are invalid" });
+      }
+
+      // Create the group
+      const group = await storage.createGroup(name, description, avatarUrl, userId, participantIds);
+
+      res.status(201).json(group);
+    } catch (error) {
+      console.error("Error creating group:", error);
+      res.status(500).json({ message: "Failed to create group" });
+    }
+  });
+
+  // Get group participants
+  app.get('/api/conversations/:id/participants', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+
+      // Verify conversation exists and is a group
+      const conversation = await storage.getConversation(id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      if (!conversation.isGroup) {
+        return res.status(400).json({ message: "This is not a group conversation" });
+      }
+
+      // Verify user is a participant
+      const userConversations = await storage.getUserConversations(userId);
+      const isParticipant = userConversations.some(conv => conv.id === id);
+      
+      if (!isParticipant) {
+        return res.status(403).json({ message: "You are not a participant in this conversation" });
+      }
+
+      const participants = await storage.getGroupParticipants(id);
+      res.json(participants);
+    } catch (error) {
+      console.error("Error fetching group participants:", error);
+      res.status(500).json({ message: "Failed to fetch group participants" });
+    }
+  });
+
+  // Add participant to group (admin only)
+  app.post('/api/conversations/:id/participants', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      const result = addParticipantSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid input", errors: result.error.issues });
+      }
+
+      const { userId: newUserId, role } = result.data;
+
+      // Verify conversation exists and is a group
+      const conversation = await storage.getConversation(id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      if (!conversation.isGroup) {
+        return res.status(400).json({ message: "This is not a group conversation" });
+      }
+
+      // Check if user has permission (system admin or group admin)
+      const isSystemAdmin = userRole === 'admin' || userRole === 'super_admin';
+      const isGroupAdmin = await storage.isGroupAdmin(id, userId);
+
+      if (!isSystemAdmin && !isGroupAdmin) {
+        return res.status(403).json({ message: "Only admins can add participants to groups" });
+      }
+
+      // Verify new user exists
+      const newUser = await storage.getUser(newUserId);
+      if (!newUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Add participant
+      await storage.addGroupParticipant(id, newUserId, role);
+
+      res.status(201).json({ message: "Participant added successfully" });
+    } catch (error) {
+      console.error("Error adding group participant:", error);
+      res.status(500).json({ message: "Failed to add group participant" });
+    }
+  });
+
+  // Remove participant from group (admin only)
+  app.delete('/api/conversations/:id/participants/:participantId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id, participantId } = req.params;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      // Verify conversation exists and is a group
+      const conversation = await storage.getConversation(id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      if (!conversation.isGroup) {
+        return res.status(400).json({ message: "This is not a group conversation" });
+      }
+
+      // Check if user has permission (system admin or group admin)
+      const isSystemAdmin = userRole === 'admin' || userRole === 'super_admin';
+      const isGroupAdmin = await storage.isGroupAdmin(id, userId);
+
+      if (!isSystemAdmin && !isGroupAdmin) {
+        return res.status(403).json({ message: "Only admins can remove participants from groups" });
+      }
+
+      // Cannot remove yourself as last admin
+      const participants = await storage.getGroupParticipants(id);
+      const admins = participants.filter(p => p.role === 'admin');
+      
+      if (participantId === userId && admins.length === 1 && admins[0].userId === userId) {
+        return res.status(400).json({ message: "Cannot remove yourself as the last admin. Promote another member to admin first." });
+      }
+
+      // Remove participant
+      await storage.removeGroupParticipant(id, participantId);
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error removing group participant:", error);
+      res.status(500).json({ message: "Failed to remove group participant" });
+    }
+  });
+
+  // Update participant role (admin only)
+  app.patch('/api/conversations/:id/participants/:participantId/role', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id, participantId } = req.params;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      const result = updateParticipantRoleSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid input", errors: result.error.issues });
+      }
+
+      const { role } = result.data;
+
+      // Verify conversation exists and is a group
+      const conversation = await storage.getConversation(id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      if (!conversation.isGroup) {
+        return res.status(400).json({ message: "This is not a group conversation" });
+      }
+
+      // Check if user has permission (system admin or group admin)
+      const isSystemAdmin = userRole === 'admin' || userRole === 'super_admin';
+      const isGroupAdmin = await storage.isGroupAdmin(id, userId);
+
+      if (!isSystemAdmin && !isGroupAdmin) {
+        return res.status(403).json({ message: "Only admins can change participant roles" });
+      }
+
+      // Update participant role
+      await storage.updateParticipantRole(id, participantId, role);
+
+      res.json({ message: "Participant role updated successfully" });
+    } catch (error) {
+      console.error("Error updating participant role:", error);
+      res.status(500).json({ message: "Failed to update participant role" });
     }
   });
 

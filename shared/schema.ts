@@ -394,3 +394,26 @@ export type MessageWithSender = Message & {
   replyTo?: Message & { sender: User };
   forwardedFromUser?: User;
 };
+
+// Group chat schemas
+export const createGroupSchema = z.object({
+  name: z.string().min(1, "Group name is required").max(100),
+  description: z.string().max(500).optional(),
+  avatarUrl: z.string().optional(),
+  participantIds: z.array(z.string()).default([]), // Allow empty array (group with just creator)
+});
+
+export type CreateGroupInput = z.infer<typeof createGroupSchema>;
+
+export const addParticipantSchema = z.object({
+  userId: z.string(),
+  role: z.enum(['admin', 'member']).default('member'),
+});
+
+export type AddParticipantInput = z.infer<typeof addParticipantSchema>;
+
+export const updateParticipantRoleSchema = z.object({
+  role: z.enum(['admin', 'member']),
+});
+
+export type UpdateParticipantRoleInput = z.infer<typeof updateParticipantRoleSchema>;
