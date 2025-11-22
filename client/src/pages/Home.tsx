@@ -249,13 +249,23 @@ export default function Home() {
   );
 
   // Fetch messages for selected conversation (no polling, only WebSocket updates)
-  const { data: messages = [], isLoading: messagesLoading } = useQuery<
+  const { data: messages = [], isLoading: messagesLoading, error: messagesError } = useQuery<
     MessageWithSender[]
   >({
     queryKey: ["/api/messages", selectedConversationId],
     enabled: !!selectedConversationId,
     staleTime: 0,
   });
+
+  // Debug logging
+  useEffect(() => {
+    console.log("[Messages Query] State:", {
+      selectedConversationId,
+      messagesLoading,
+      messagesCount: messages?.length,
+      error: messagesError,
+    });
+  }, [selectedConversationId, messagesLoading, messages, messagesError]);
 
   // When a conversation is opened, invalidate conversations list after a short delay
   // to allow the backend to mark messages as read and update unread count
