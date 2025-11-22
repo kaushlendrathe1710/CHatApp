@@ -3,10 +3,11 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Search, MessageCircle, Users as UsersIcon } from "lucide-react";
+import { ArrowLeft, Search, MessageCircle, Users as UsersIcon, Shield, ShieldCheck } from "lucide-react";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getUserDisplayName, formatLastSeen } from "@/lib/formatters";
@@ -204,12 +205,26 @@ export default function People() {
 
                     {/* User Info */}
                     <div className="flex-1 min-w-0 space-y-1">
-                      <h3
-                        className="font-semibold truncate"
-                        data-testid={`text-username-${user.id}`}
-                      >
-                        {getUserDisplayName(user)}
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3
+                          className="font-semibold truncate"
+                          data-testid={`text-username-${user.id}`}
+                        >
+                          {getUserDisplayName(user)}
+                        </h3>
+                        {user.role === 'super_admin' && (
+                          <Badge variant="default" className="flex-shrink-0" data-testid={`badge-role-${user.id}`}>
+                            <ShieldCheck className="h-3 w-3 mr-1" />
+                            Super Admin
+                          </Badge>
+                        )}
+                        {user.role === 'admin' && (
+                          <Badge variant="secondary" className="flex-shrink-0" data-testid={`badge-role-${user.id}`}>
+                            <Shield className="h-3 w-3 mr-1" />
+                            Admin
+                          </Badge>
+                        )}
+                      </div>
                       {user.username && (
                         <p
                           className="text-sm text-muted-foreground truncate"

@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { OnlineStatus } from "@/components/OnlineStatus";
 import { formatChatListTime, getUserDisplayName } from "@/lib/formatters";
 import type { ConversationWithDetails } from "@shared/schema";
-import { Users, Image as ImageIcon, Paperclip } from "lucide-react";
+import { Users, Image as ImageIcon, Paperclip, Shield, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ConversationListItemProps {
@@ -96,9 +96,25 @@ export function ConversationListItem({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-1">
-          <h3 className="font-medium truncate" data-testid="text-conversation-name">
-            {getConversationName()}
-          </h3>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <h3 className="font-medium truncate" data-testid="text-conversation-name">
+              {getConversationName()}
+            </h3>
+            {!conversation.isGroup && !conversation.isBroadcast && otherParticipants.length > 0 && (
+              <>
+                {otherParticipants[0].user.role === 'super_admin' && (
+                  <Badge variant="default" className="flex-shrink-0 text-xs px-1 py-0 h-4">
+                    <ShieldCheck className="h-2.5 w-2.5" />
+                  </Badge>
+                )}
+                {otherParticipants[0].user.role === 'admin' && (
+                  <Badge variant="secondary" className="flex-shrink-0 text-xs px-1 py-0 h-4">
+                    <Shield className="h-2.5 w-2.5" />
+                  </Badge>
+                )}
+              </>
+            )}
+          </div>
           {conversation.lastMessage && (
             <span className="text-xs text-muted-foreground flex-shrink-0" data-testid="text-last-message-time">
               {formatChatListTime(conversation.lastMessage.createdAt!)}
