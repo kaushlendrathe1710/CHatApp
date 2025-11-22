@@ -244,6 +244,105 @@ export const MessageComposer = React.memo(function MessageComposer({
     }
   };
 
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    // Check if any of the clipboard items is an image
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        try {
+          // Show loading toast
+          toast({
+            title: "Uploading Image",
+            description: "Please wait...",
+          });
+
+          // Get signed upload URL from server
+          const response = await apiRequest(
+            "POST",
+            "/api/messages/upload-url",
+            {
+              fileName: file.name || `pasted-image-${Date.now()}.png`,
+              mimeType: file.type,
+              fileSize: file.size,
+            }
+          );
+          const uploadResponse = await response.json() as { uploadURL: string; objectKey: string };
+
+          // Upload to S3 using signed URL
+          const uploadResult = await fetch(uploadResponse.uploadURL, {
+            method: "PUT",
+            headers: {
+              "Content-Type": file.type,
+            },
+            body: file,
+          });
+
+          if (!uploadResult.ok) {
+            throw new Error(`Failed to upload image`);
+          }
+
+          // Set file metadata to public and get the public objectPath
+          const metadataResponse = await fetch("/api/objects/metadata", {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              fileUrl: uploadResponse.objectKey,
+            }),
+          });
+
+          if (!metadataResponse.ok) {
+            const errorData = await metadataResponse.json();
+            throw new Error(errorData.error || "Failed to set file metadata");
+          }
+
+          const { objectPath } = await metadataResponse.json();
+
+          // Store file data for sending with message
+          setPendingFileData({
+            fileUrl: objectPath,
+            fileName: file.name || `pasted-image-${Date.now()}.png`,
+            fileSize: file.size,
+            mediaObjectKey: uploadResponse.objectKey,
+            mimeType: file.type,
+            type: "image",
+          });
+
+          toast({
+            title: "Image Ready",
+            description: "Add a caption or send it now.",
+          });
+
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+          }
+        } catch (error) {
+          console.error("Error uploading pasted image:", error);
+          toast({
+            title: "Upload Failed",
+            description:
+              error instanceof Error ? error.message : "Failed to upload image",
+            variant: "destructive",
+          });
+        }
+        
+        // Only process the first image
+        break;
+      }
+    }
+  };
+
   const handleVoiceRecordComplete = async (audioBlob: Blob, duration: number) => {
     try {
       // Create file from blob
@@ -462,6 +561,7 @@ export const MessageComposer = React.memo(function MessageComposer({
             value={message}
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={placeholder}
             className="min-h-[44px] max-h-32 resize-none"
             rows={1}
