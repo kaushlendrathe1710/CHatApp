@@ -34,6 +34,7 @@ export const users = pgTable("users", {
   fullName: varchar("full_name"),
   profileImageUrl: varchar("profile_image_url"),
   status: text("status").default("Available"),
+  role: text("role").default("user").notNull(), // user, admin, super_admin
   lastSeen: timestamp("last_seen").defaultNow(),
   isRegistered: boolean("is_registered").default(false).notNull(),
   // Privacy settings
