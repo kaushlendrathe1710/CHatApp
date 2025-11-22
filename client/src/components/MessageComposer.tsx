@@ -1,8 +1,18 @@
-import { useState, useRef, KeyboardEvent, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Paperclip, Send, Smile, X, Camera } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import type { MessageWithSender } from "@shared/schema";
 import { FileAttachmentUploader } from "./FileAttachmentUploader";
@@ -11,14 +21,17 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
 interface MessageComposerProps {
-  onSendMessage: (content: string, fileData?: {
-    fileUrl: string;
-    fileName: string;
-    fileSize: number;
-    mediaObjectKey: string;
-    mimeType: string;
-    type: 'image' | 'video' | 'document' | 'audio';
-  }) => void;
+  onSendMessage: (
+    content: string,
+    fileData?: {
+      fileUrl: string;
+      fileName: string;
+      fileSize: number;
+      mediaObjectKey: string;
+      mimeType: string;
+      type: "image" | "video" | "document" | "audio";
+    }
+  ) => void;
   onTyping?: () => void;
   disabled?: boolean;
   placeholder?: string;
@@ -26,56 +39,78 @@ interface MessageComposerProps {
   onCancelReply?: () => void;
 }
 
-export function MessageComposer({
+export const MessageComposer = React.memo(function MessageComposer({
   onSendMessage,
   onTyping,
   disabled = false,
   placeholder = "Type a message...",
   replyToMessage,
-  onCancelReply
+  onCancelReply,
 }: MessageComposerProps) {
   const [message, setMessage] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [focusAfterSend, setFocusAfterSend] = useState(false);
   const [pendingFileData, setPendingFileData] = useState<{
     fileUrl: string;
     fileName: string;
     fileSize: number;
     mediaObjectKey: string;
     mimeType: string;
-    type: 'image' | 'video' | 'document' | 'audio';
+    type: "image" | "video" | "document" | "audio";
   } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
   // Auto-focus input on mount
   useEffect(() => {
+    console.warn("MessageComposer: Auto-focusing on mount");
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
   }, []);
 
+  // Focus after sending message, when not disabled
+  useLayoutEffect(() => {
+    console.warn(
+      "MessageComposer: useLayoutEffect for focusAfterSend triggered, focusAfterSend:",
+      focusAfterSend,
+      "disabled:",
+      disabled
+    );
+    if (focusAfterSend && !disabled && textareaRef.current) {
+      console.warn(
+        "MessageComposer: Focusing textarea after send (not disabled)"
+      );
+      // Use setTimeout to ensure focus happens after any DOM updates
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+        }
+      }, 0);
+      setFocusAfterSend(false);
+    } else if (focusAfterSend && disabled) {
+      console.warn("MessageComposer: Waiting to focus, still disabled");
+    } else if (focusAfterSend && !textareaRef.current) {
+      console.warn(
+        "MessageComposer: focusAfterSend is true but textareaRef.current is null"
+      );
+    }
+  }, [focusAfterSend, disabled]);
+
   const handleSend = () => {
     // Allow sending if message has content OR if file is attached
     if (!disabled && (message.trim() || pendingFileData)) {
+      console.warn(
+        "MessageComposer: Sending message, setting focusAfterSend to true"
+      );
       onSendMessage(message.trim() || "", pendingFileData || undefined);
       setMessage("");
       setPendingFileData(null);
       if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = "auto";
       }
-      // Use multiple focus attempts to ensure it works after all re-renders
-      // Immediate focus
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-      });
-      // Delayed focus to catch any late re-renders
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 50);
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 100);
+      setFocusAfterSend(true);
     }
   };
 
@@ -85,7 +120,7 @@ export function MessageComposer({
     fileSize: number;
     mediaObjectKey: string;
     mimeType: string;
-    type: 'image' | 'video' | 'document' | 'audio';
+    type: "image" | "video" | "document" | "audio";
   }) => {
     // Store file data and let user add caption before sending
     setPendingFileData(fileData);
@@ -101,39 +136,43 @@ export function MessageComposer({
   const handleCameraCapture = async (file: File) => {
     try {
       // Get signed upload URL from server
-      const uploadResponse = await apiRequest('POST', '/api/messages/upload-url', {
-        fileName: file.name,
-        mimeType: file.type,
-        fileSize: file.size,
-      }) as unknown as { uploadURL: string; objectKey: string };
+      const uploadResponse = (await apiRequest(
+        "POST",
+        "/api/messages/upload-url",
+        {
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+        }
+      )) as unknown as { uploadURL: string; objectKey: string };
 
       // Upload to GCS using signed URL
       const uploadResult = await fetch(uploadResponse.uploadURL, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': file.type,
+          "Content-Type": file.type,
         },
         body: file,
       });
 
       if (!uploadResult.ok) {
-        throw new Error('Failed to upload file to cloud storage');
+        throw new Error("Failed to upload file to cloud storage");
       }
 
       // Set file metadata to public and get the public objectPath
-      const metadataResponse = await fetch('/api/objects/metadata', {
-        method: 'PUT',
+      const metadataResponse = await fetch("/api/objects/metadata", {
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-        credentials: 'include',
+        credentials: "include",
         body: JSON.stringify({
           fileUrl: uploadResponse.objectKey,
         }),
       });
 
       if (!metadataResponse.ok) {
-        throw new Error('Failed to set file metadata');
+        throw new Error("Failed to set file metadata");
       }
 
       const { objectPath } = await metadataResponse.json();
@@ -145,7 +184,7 @@ export function MessageComposer({
         fileSize: file.size,
         mediaObjectKey: uploadResponse.objectKey,
         mimeType: file.type,
-        type: 'image',
+        type: "image",
       });
 
       toast({
@@ -157,24 +196,25 @@ export function MessageComposer({
         textareaRef.current.focus();
       }
     } catch (error) {
-      console.error('Error uploading camera photo:', error);
+      console.error("Error uploading camera photo:", error);
       toast({
         title: "Upload Failed",
-        description: error instanceof Error ? error.message : "Failed to upload photo",
+        description:
+          error instanceof Error ? error.message : "Failed to upload photo",
         variant: "destructive",
       });
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
 
   const handleEmojiClick = (emojiData: EmojiClickData) => {
-    setMessage(prev => prev + emojiData.emoji);
+    setMessage((prev) => prev + emojiData.emoji);
     setEmojiOpen(false);
     textareaRef.current?.focus();
   };
@@ -182,21 +222,26 @@ export function MessageComposer({
   const handleChange = (value: string) => {
     setMessage(value);
     onTyping?.();
-    
+
     // Auto-resize textarea
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 128) + 'px';
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height =
+        Math.min(textareaRef.current.scrollHeight, 128) + "px";
     }
   };
 
   return (
     <div className="border-t bg-background p-4">
       {replyToMessage && (
-        <div className="mb-2 flex items-center gap-2 bg-muted p-2 rounded-md" data-testid="reply-preview">
+        <div
+          className="mb-2 flex items-center gap-2 bg-muted p-2 rounded-md"
+          data-testid="reply-preview"
+        >
           <div className="flex-1 min-w-0">
             <p className="text-xs text-muted-foreground">
-              Replying to {replyToMessage.sender.fullName || replyToMessage.sender.email}
+              Replying to{" "}
+              {replyToMessage.sender.fullName || replyToMessage.sender.email}
             </p>
             <p className="text-sm truncate">{replyToMessage.content}</p>
           </div>
@@ -211,10 +256,13 @@ export function MessageComposer({
           </Button>
         </div>
       )}
-      
+
       {/* Pending File Preview */}
       {pendingFileData && (
-        <div className="mb-2 flex items-center gap-2 bg-muted p-2 rounded-md" data-testid="pending-file-preview">
+        <div
+          className="mb-2 flex items-center gap-2 bg-muted p-2 rounded-md"
+          data-testid="pending-file-preview"
+        >
           <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm truncate">{pendingFileData.fileName}</p>
@@ -233,7 +281,7 @@ export function MessageComposer({
           </Button>
         </div>
       )}
-      
+
       <div className="flex items-end gap-2">
         <FileAttachmentUploader
           onFileUpload={handleFileUpload}
@@ -263,7 +311,11 @@ export function MessageComposer({
               <Smile className="h-5 w-5" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 border-0" align="start" side="top">
+          <PopoverContent
+            className="w-auto p-0 border-0"
+            align="start"
+            side="top"
+          >
             <EmojiPicker
               onEmojiClick={handleEmojiClick}
               theme={Theme.AUTO}
@@ -282,7 +334,6 @@ export function MessageComposer({
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            disabled={disabled}
             className="min-h-[44px] max-h-32 resize-none"
             rows={1}
             data-testid="input-message"
@@ -307,4 +358,4 @@ export function MessageComposer({
       />
     </div>
   );
-}
+});
