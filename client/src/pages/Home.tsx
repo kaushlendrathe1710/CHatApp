@@ -109,8 +109,8 @@ export default function Home() {
   const [messageToForward, setMessageToForward] =
     useState<MessageWithSender | null>(null);
   const [broadcastDialogOpen, setBroadcastDialogOpen] = useState(false);
-  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [groupSettingsDialogOpen, setGroupSettingsDialogOpen] = useState(false);
+  const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
@@ -893,26 +893,15 @@ export default function Home() {
 
             <div className="flex items-center gap-1">
               {(user?.role === 'admin' || user?.role === 'super_admin') && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setGroupDialogOpen(true)}
-                    data-testid="button-create-group"
-                    title="Create Group"
-                  >
-                    <Users className="h-5 w-5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setBroadcastDialogOpen(true)}
-                    data-testid="button-create-broadcast"
-                    title="Create Broadcast Channel"
-                  >
-                    <Radio className="h-5 w-5" />
-                  </Button>
-                </>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setBroadcastDialogOpen(true)}
+                  data-testid="button-create-broadcast"
+                  title="Create Broadcast Channel"
+                >
+                  <Radio className="h-5 w-5" />
+                </Button>
               )}
               <NewConversationDialog
                 users={allUsers}
@@ -983,6 +972,21 @@ export default function Home() {
               />
             </div>
           </div>
+
+          {/* New Group Button (Admin Only) */}
+          {(user?.role === 'admin' || user?.role === 'super_admin') && (
+            <div className="p-3 border-b flex-shrink-0">
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => setCreateGroupDialogOpen(true)}
+                data-testid="button-new-group"
+              >
+                <Users className="h-4 w-4" />
+                New Group
+              </Button>
+            </div>
+          )}
 
           {/* Conversations List */}
           <ScrollArea className="flex-1">
@@ -1470,8 +1474,8 @@ export default function Home() {
       />
 
       <CreateGroupDialog
-        open={groupDialogOpen}
-        onOpenChange={setGroupDialogOpen}
+        open={createGroupDialogOpen}
+        onOpenChange={setCreateGroupDialogOpen}
       />
 
       {selectedConversation && selectedConversation.isGroup && (
