@@ -42,7 +42,7 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 - **Encryption:** End-to-end encryption for direct messages using RSA keys stored per conversation-user pair.
 - **Privacy Controls:** User-level privacy settings for profile visibility, last seen, and online status.
 - **Role-Based Access:** `user`, `admin`, `super_admin` roles control visibility and conversation creation.
-- **WhatsApp-Like Messaging:** Visual read receipts (single, double gray, green ticks), copy/delete message functionality, online/offline presence broadcasting, camera integration for photo capture, and delete entire chat option.
+- **WhatsApp-Like Messaging:** Visual read receipts (single, double gray, green ticks), comprehensive message actions (copy, reply, forward, edit, delete) accessible via hover dropdown menu, inline reply preview within message bubbles showing quoted sender and content with left border accent, online/offline presence broadcasting, camera integration for photo capture, and delete entire chat option. Message deletion includes proper cache invalidation and toast feedback.
 - **Delete Conversation:** User-scoped conversation deletion that removes the user's participation while preserving the conversation for other participants (WhatsApp-like "delete for me" behavior).
 
 ## External Dependencies
