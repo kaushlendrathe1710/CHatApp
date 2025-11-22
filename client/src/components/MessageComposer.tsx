@@ -148,7 +148,8 @@ export const MessageComposer = React.memo(function MessageComposer({
       const uploadResponse = await response.json() as { uploadURL: string; objectKey: string };
       console.log("Upload response received:", JSON.stringify(uploadResponse));
 
-      // Upload to GCS using signed URL
+      // Upload to S3 using signed URL
+      console.log("Uploading to S3, file size:", file.size, "type:", file.type);
       const uploadResult = await fetch(uploadResponse.uploadURL, {
         method: "PUT",
         headers: {
@@ -157,8 +158,11 @@ export const MessageComposer = React.memo(function MessageComposer({
         body: file,
       });
 
+      console.log("S3 upload response status:", uploadResult.status, uploadResult.statusText);
       if (!uploadResult.ok) {
-        throw new Error("Failed to upload file to cloud storage");
+        const errorText = await uploadResult.text();
+        console.error("S3 upload error:", errorText);
+        throw new Error(`Failed to upload file to cloud storage: ${uploadResult.status} ${errorText.substring(0, 200)}`);
       }
 
       // Set file metadata to public and get the public objectPath
