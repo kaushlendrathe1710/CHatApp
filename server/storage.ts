@@ -30,7 +30,7 @@ import {
   type MessageWithSender,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, or, ne, inArray, sql, desc } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -42,6 +42,7 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<User>): Promise<User>;
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
+  getUsersFiltered(currentUserId: string, currentUserRole: string): Promise<User[]>;
   updateUserLastSeen(userId: string): Promise<void>;
   
   // Conversation operations
@@ -169,6 +170,34 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return await db.select().from(users);
+  }
+
+  async getUsersFiltered(currentUserId: string, currentUserRole: string): Promise<User[]> {
+    // Build the query with database-level filtering
+    let query = db.select().from(users)
+      .where(
+        and(
+          ne(users.id, currentUserId), // Exclude current user
+          ne(users.profileVisibility, 'hidden') // Exclude hidden users
+        )
+      );
+    
+    // If current user is a regular user, only show admins and super admins
+    if (currentUserRole === 'user') {
+      query = db.select().from(users)
+        .where(
+          and(
+            ne(users.id, currentUserId),
+            ne(users.profileVisibility, 'hidden'),
+            or(
+              eq(users.role, 'admin'),
+              eq(users.role, 'super_admin')
+            )
+          )
+        );
+    }
+    
+    return await query;
   }
 
   async getUsersByIds(ids: string[]): Promise<User[]> {

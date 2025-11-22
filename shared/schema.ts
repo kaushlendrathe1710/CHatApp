@@ -45,7 +45,9 @@ export const users = pgTable("users", {
   onlineStatusVisibility: boolean("online_status_visibility").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_users_role_visibility").on(table.role, table.profileVisibility),
+]);
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -149,8 +151,7 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at"),
 }, (table) => [
-  index("idx_messages_conversation").on(table.conversationId),
-  index("idx_messages_created").on(table.createdAt),
+  index("idx_messages_conversation_created").on(table.conversationId, table.createdAt.desc()),
   index("idx_messages_reply_to").on(table.replyToId),
   index("idx_messages_expires_at").on(table.expiresAt),
 ]);

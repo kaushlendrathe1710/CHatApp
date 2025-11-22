@@ -78,18 +78,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentUserId = req.user.id;
       const currentUserRole = req.user.role || 'user';
       
-      const allUsers = await storage.getAllUsers();
-      
-      // Role-based filtering: Regular users can only see admins and super admins
-      let filteredUsers = allUsers
-        .filter(u => u.id !== currentUserId) // Exclude current user
-        .filter(u => u.profileVisibility !== 'hidden'); // Exclude hidden users
-      
-      // If current user is a regular user, only show admins and super admins
-      if (currentUserRole === 'user') {
-        filteredUsers = filteredUsers.filter(u => u.role === 'admin' || u.role === 'super_admin');
-      }
-      // Admins and super admins can see everyone
+      // Use database-level filtering for better performance
+      const filteredUsers = await storage.getUsersFiltered(currentUserId, currentUserRole);
       
       // Sanitize each user's data based on their privacy settings
       const sanitizedUsers = await Promise.all(
