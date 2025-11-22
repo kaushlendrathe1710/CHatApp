@@ -254,6 +254,7 @@ export default function Home() {
   >({
     queryKey: ["/api/messages", selectedConversationId],
     enabled: !!selectedConversationId,
+    staleTime: 0,
   });
 
   // When a conversation is opened, invalidate conversations list after a short delay
