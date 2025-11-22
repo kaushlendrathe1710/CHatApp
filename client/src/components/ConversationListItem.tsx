@@ -115,11 +115,15 @@ export function ConversationListItem({
               </>
             )}
           </div>
-          {conversation.lastMessage && (
+          {!conversation.isGroup && isOnline ? (
+            <span className="text-xs text-status-online flex-shrink-0" data-testid="text-online-status">
+              online
+            </span>
+          ) : conversation.lastMessage ? (
             <span className="text-xs text-muted-foreground flex-shrink-0" data-testid="text-last-message-time">
               {formatChatListTime(conversation.lastMessage.createdAt!)}
             </span>
-          )}
+          ) : null}
         </div>
         
         <div className="flex items-center justify-between gap-2">
