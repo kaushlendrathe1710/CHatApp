@@ -100,9 +100,27 @@ export function FileAttachmentUploader({ onFileUpload, disabled }: FileAttachmen
         throw new Error('Failed to upload file');
       }
 
-      // Step 3: Construct file data to return
+      // Step 3: Set object metadata to make file publicly accessible
+      const metadataResponse = await fetch('/api/objects/metadata', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          fileUrl: objectKey, // Use objectKey (e.g. /objects/...) not uploadURL
+        }),
+      });
+
+      if (!metadataResponse.ok) {
+        throw new Error('Failed to set file metadata');
+      }
+
+      const { objectPath } = await metadataResponse.json();
+      
+      // Construct file data to return - use objectPath which is served through /objects/ endpoint
       const fileData = {
-        fileUrl: objectKey, // Use objectKey as fileUrl
+        fileUrl: objectPath, // Use /objects/... path
         fileName: selectedFile.name,
         fileSize: selectedFile.size,
         mediaObjectKey: objectKey,

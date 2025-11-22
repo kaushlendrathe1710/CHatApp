@@ -26,6 +26,9 @@ export function broadcastToConversation(conversationId: string, message: any) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize ObjectStorageService instance
+  const objectStorageService = new ObjectStorageService();
+  
   // Setup session
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);

@@ -218,11 +218,13 @@ export default function Home() {
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ content, fileUrl, fileName, fileSize, type, replyToId, isEncrypted }: {
+    mutationFn: async ({ content, fileUrl, fileName, fileSize, mediaObjectKey, mimeType, type, replyToId, isEncrypted }: {
       content?: string;
       fileUrl?: string;
       fileName?: string;
       fileSize?: number;
+      mediaObjectKey?: string;
+      mimeType?: string;
       type?: string;
       replyToId?: string;
       isEncrypted?: boolean;
@@ -233,6 +235,8 @@ export default function Home() {
         fileUrl,
         fileName,
         fileSize,
+        mediaObjectKey,
+        mimeType,
         type: type || 'text',
         replyToId,
         isEncrypted: isEncrypted || false,
@@ -322,12 +326,19 @@ export default function Home() {
     // This will be triggered by ObjectUploader
   };
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, fileData?: {
+    fileUrl: string;
+    fileName: string;
+    fileSize: number;
+    mediaObjectKey: string;
+    mimeType: string;
+    type: 'image' | 'video' | 'document' | 'audio';
+  }) => {
     let finalContent = content;
     let isEncrypted = false;
 
-    // Encrypt message if encryption is enabled (only for direct conversations)
-    if (isEncryptionEnabled && selectedConversation) {
+    // Encrypt text caption if encryption is enabled (file metadata stays plaintext)
+    if (content && isEncryptionEnabled && selectedConversation) {
       // Prevent encryption in group chats and broadcast channels
       if (selectedConversation.isGroup || selectedConversation.isBroadcast) {
         toast({
@@ -357,6 +368,12 @@ export default function Home() {
 
     sendMessageMutation.mutate({ 
       content: finalContent,
+      fileUrl: fileData?.fileUrl,
+      fileName: fileData?.fileName,
+      fileSize: fileData?.fileSize,
+      mediaObjectKey: fileData?.mediaObjectKey,
+      mimeType: fileData?.mimeType,
+      type: fileData?.type,
       replyToId: replyToMessage?.id,
       isEncrypted 
     });
@@ -850,7 +867,6 @@ export default function Home() {
             {/* Message Composer */}
             <MessageComposer
               onSendMessage={handleSendMessage}
-              onAttachFile={handleFileUpload}
               onTyping={handleTyping}
               disabled={sendMessageMutation.isPending}
               replyToMessage={replyToMessage}

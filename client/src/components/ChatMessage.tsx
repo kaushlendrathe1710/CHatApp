@@ -14,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FilePreview } from "./FilePreview";
 
 interface ChatMessageProps {
   message: MessageWithSender;
@@ -142,53 +143,19 @@ export function ChatMessage({
     }
     
     // Regular message rendering
-    if (message.type === 'image' && message.fileUrl) {
+    // Handle file attachments (images, videos, documents, audio)
+    if ((message.type === 'image' || message.type === 'video' || message.type === 'document' || message.type === 'audio' || message.type === 'file') && message.fileUrl) {
+      const fileType = message.type === 'file' ? 'document' : message.type;
       return (
         <div className="space-y-2">
-          <div className="rounded-md overflow-hidden max-w-sm">
-            <img 
-              src={message.fileUrl} 
-              alt={message.fileName || 'Shared image'} 
-              className="w-full h-auto max-h-96 object-cover"
-              data-testid={`img-message-${message.id}`}
-            />
-          </div>
-          {message.content && (
-            <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
-          )}
-        </div>
-      );
-    }
-
-    if (message.type === 'file' && message.fileUrl) {
-      return (
-        <div className="space-y-2">
-          <div className={`flex items-center gap-3 p-3 rounded-md ${
-            isOwn ? 'bg-primary/10' : 'bg-muted'
-          }`}>
-            <div className={`p-2 rounded-md ${isOwn ? 'bg-primary/20' : 'bg-background'}`}>
-              <FileText className="h-5 w-5" data-testid={`icon-file-${message.id}`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{message.fileName || 'File'}</p>
-              {message.fileSize && (
-                <p className="text-xs text-muted-foreground">
-                  {(message.fileSize / 1024 / 1024).toFixed(2)} MB
-                </p>
-              )}
-            </div>
-            <Button 
-              size="icon" 
-              variant="ghost"
-              className="flex-shrink-0"
-              asChild
-              data-testid={`button-download-${message.id}`}
-            >
-              <a href={message.fileUrl} download={message.fileName} target="_blank" rel="noopener noreferrer">
-                <Download className="h-4 w-4" />
-              </a>
-            </Button>
-          </div>
+          <FilePreview
+            fileUrl={message.fileUrl}
+            fileName={message.fileName || 'File'}
+            fileSize={message.fileSize || undefined}
+            mimeType={message.mimeType || 'application/octet-stream'}
+            type={fileType as 'image' | 'video' | 'document' | 'audio' | 'text'}
+            showDownload={true}
+          />
           {message.content && (
             <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
           )}

@@ -5,10 +5,17 @@ import { Paperclip, Send, Smile, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import type { MessageWithSender } from "@shared/schema";
+import { FileAttachmentUploader } from "./FileAttachmentUploader";
 
 interface MessageComposerProps {
-  onSendMessage: (content: string) => void;
-  onAttachFile?: () => void;
+  onSendMessage: (content: string, fileData?: {
+    fileUrl: string;
+    fileName: string;
+    fileSize: number;
+    mediaObjectKey: string;
+    mimeType: string;
+    type: 'image' | 'video' | 'document' | 'audio';
+  }) => void;
   onTyping?: () => void;
   disabled?: boolean;
   placeholder?: string;
@@ -18,7 +25,6 @@ interface MessageComposerProps {
 
 export function MessageComposer({
   onSendMessage,
-  onAttachFile,
   onTyping,
   disabled = false,
   placeholder = "Type a message...",
@@ -27,17 +33,46 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const [message, setMessage] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [pendingFileData, setPendingFileData] = useState<{
+    fileUrl: string;
+    fileName: string;
+    fileSize: number;
+    mediaObjectKey: string;
+    mimeType: string;
+    type: 'image' | 'video' | 'document' | 'audio';
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = () => {
-    if (message.trim() && !disabled) {
-      onSendMessage(message.trim());
+    // Allow sending if message has content OR if file is attached
+    if (!disabled && (message.trim() || pendingFileData)) {
+      onSendMessage(message.trim() || "", pendingFileData || undefined);
       setMessage("");
+      setPendingFileData(null);
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
         textareaRef.current.focus();
       }
     }
+  };
+
+  const handleFileUpload = (fileData: {
+    fileUrl: string;
+    fileName: string;
+    fileSize: number;
+    mediaObjectKey: string;
+    mimeType: string;
+    type: 'image' | 'video' | 'document' | 'audio';
+  }) => {
+    // Store file data and let user add caption before sending
+    setPendingFileData(fileData);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setPendingFileData(null);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -85,19 +120,34 @@ export function MessageComposer({
           </Button>
         </div>
       )}
-      <div className="flex items-end gap-2">
-        {onAttachFile && (
+      
+      {/* Pending File Preview */}
+      {pendingFileData && (
+        <div className="mb-2 flex items-center gap-2 bg-muted p-2 rounded-md" data-testid="pending-file-preview">
+          <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm truncate">{pendingFileData.fileName}</p>
+            <p className="text-xs text-muted-foreground">
+              {(pendingFileData.fileSize / 1024 / 1024).toFixed(2)} MB
+            </p>
+          </div>
           <Button
             size="icon"
             variant="ghost"
-            onClick={onAttachFile}
-            disabled={disabled}
-            className="flex-shrink-0"
-            data-testid="button-attach-file"
+            onClick={handleRemoveFile}
+            className="flex-shrink-0 h-6 w-6"
+            data-testid="button-remove-file"
           >
-            <Paperclip className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </Button>
-        )}
+        </div>
+      )}
+      
+      <div className="flex items-end gap-2">
+        <FileAttachmentUploader
+          onFileUpload={handleFileUpload}
+          disabled={disabled}
+        />
 
         <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
           <PopoverTrigger asChild>
@@ -140,7 +190,7 @@ export function MessageComposer({
         <Button
           size="icon"
           onClick={handleSend}
-          disabled={!message.trim() || disabled}
+          disabled={(!message.trim() && !pendingFileData) || disabled}
           className="flex-shrink-0"
           data-testid="button-send"
         >
