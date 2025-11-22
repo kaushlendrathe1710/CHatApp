@@ -606,12 +606,25 @@ export default function Home() {
           ) : filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full p-8 text-center">
               <MessageCircle className="h-12 w-12 text-muted-foreground mb-3" />
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground font-medium">
                 {searchQuery ? 'No conversations found' : 'No conversations yet'}
               </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Start a new conversation to begin chatting
-              </p>
+              {!searchQuery && (
+                <>
+                  <p className="text-sm text-muted-foreground mt-2 mb-3">
+                    Click the <Users className="h-4 w-4 inline mx-1" /> People button above to see all users
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => setLocation("/people")}
+                    data-testid="button-browse-people"
+                    className="gap-2"
+                  >
+                    <Users className="h-4 w-4" />
+                    Browse People
+                  </Button>
+                </>
+              )}
             </div>
           ) : (
             <div data-testid="conversations-list">
