@@ -38,7 +38,7 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 
 - **Authentication:** Passwordless email/OTP using Nodemailer with bcrypt hashing and rate limiting.
 - **Real-time Features:** WebSocket server integrated with Express, managing specific conversation rooms for broadcasting.
-- **Media Handling:** Google Cloud Storage integration for media files, with secure two-phase upload and custom Object ACLs.
+- **Media Handling:** AWS S3 integration for media files using presigned URLs for secure uploads and downloads. Metadata stored separately for ACL policies.
 - **Encryption:** End-to-end encryption for direct messages using RSA keys stored per conversation-user pair.
 - **Privacy Controls:** User-level privacy settings for profile visibility, last seen, and online status.
 - **Role-Based Access:** `user`, `admin`, `super_admin` roles control visibility and conversation creation.
@@ -47,7 +47,7 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 
 ## External Dependencies
 
-**Cloud Storage:** Google Cloud Storage via `@google-cloud/storage` for media, Uppy.js for uploads.
+**Cloud Storage:** AWS S3 via `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` for media uploads/downloads with presigned URLs.
 **Database Service:** Neon Serverless PostgreSQL.
 **SMTP Email Service:** Nodemailer.
 **Development Tools:** Replit-specific Vite plugins.

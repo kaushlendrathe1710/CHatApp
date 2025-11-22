@@ -5,8 +5,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { ObjectPermission } from "./objectAcl";
+import { S3StorageService, ObjectNotFoundError, ObjectPermission } from "./s3Storage";
 import { insertConversationSchema, insertMessageSchema } from "@shared/schema";
 import { z } from "zod";
 
@@ -50,8 +49,8 @@ export function broadcastToConversation(conversationId: string, message: any) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Initialize ObjectStorageService instance
-  const objectStorageService = new ObjectStorageService();
+  // Initialize S3StorageService instance
+  const objectStorageService = new S3StorageService();
   
   // Setup session
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -179,12 +178,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/photos/upload-url', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const result = await objectStorageService.getObjectEntityUploadURL();
       
-      // Normalize the full signed URL to get canonical /objects/... key
-      const objectKey = objectStorageService.normalizeObjectEntityPath(uploadURL);
-      
-      res.json({ uploadURL, objectKey });
+      res.json(result);
     } catch (error) {
       console.error("Error generating upload URL:", error);
       res.status(500).json({ message: "Failed to generate upload URL" });
@@ -195,12 +191,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/messages/upload-url', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const result = await objectStorageService.getObjectEntityUploadURL();
       
-      // Normalize the full signed URL to get canonical /objects/... key
-      const objectKey = objectStorageService.normalizeObjectEntityPath(uploadURL);
-      
-      res.json({ uploadURL, objectKey });
+      res.json(result);
     } catch (error) {
       console.error("Error generating message upload URL:", error);
       res.status(500).json({ message: "Failed to generate upload URL" });
@@ -238,14 +231,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get the object file to verify it exists and user has access
       try {
         const objectFile = await objectStorageService.getObjectEntityFile(objectKey);
-        const [exists] = await objectFile.exists();
-        
-        if (!exists) {
-          return res.status(404).json({ message: "Uploaded file not found" });
-        }
         
         // Verify user has write access to this object (ownership check)
-        const { ObjectPermission } = await import('./objectAcl');
         const canAccess = await objectStorageService.canAccessObjectEntity({
           userId,
           objectFile,
@@ -256,9 +243,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ message: "Not authorized to use this object" });
         }
         
-        // Generate public URL from objectKey
-        const [metadata] = await objectFile.getMetadata();
-        const photoUrl = `https://storage.googleapis.com/${metadata.bucket}/${metadata.name}`;
+        // Generate public URL from objectKey for S3
+        const bucketName = process.env.AWS_S3_BUCKET_NAME || "";
+        const region = process.env.AWS_REGION || "us-east-1";
+        const key = objectKey.replace('/objects/', '');
+        const photoUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
         
         // Create photo record with both URL and objectKey
         const photo = await storage.createPhoto({
@@ -1023,11 +1012,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Object storage routes
   app.get("/objects/:objectPath(*)", isAuthenticated, async (req: any, res) => {
-    const userId = req.user?.claims?.sub;
-    const objectStorageService = new ObjectStorageService();
+    const userId = req.user.id;
+    const s3Service = new S3StorageService();
     try {
-      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
-      const canAccess = await objectStorageService.canAccessObjectEntity({
+      const objectFile = await s3Service.getObjectEntityFile(req.path);
+      const canAccess = await s3Service.canAccessObjectEntity({
         objectFile,
         userId: userId,
         requestedPermission: ObjectPermission.READ,
@@ -1035,7 +1024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!canAccess) {
         return res.sendStatus(401);
       }
-      objectStorageService.downloadObject(objectFile, res);
+      s3Service.downloadObject(objectFile, res);
     } catch (error) {
       console.error("Error checking object access:", error);
       if (error instanceof ObjectNotFoundError) {
@@ -1046,9 +1035,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/objects/upload", isAuthenticated, async (req: any, res) => {
-    const objectStorageService = new ObjectStorageService();
-    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-    res.json({ uploadURL });
+    const s3Service = new S3StorageService();
+    const result = await s3Service.getObjectEntityUploadURL();
+    res.json(result);
   });
 
   app.put("/api/objects/metadata", isAuthenticated, async (req: any, res) => {
@@ -1056,11 +1045,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "fileUrl is required" });
     }
 
-    const userId = req.user?.claims?.sub;
+    const userId = req.user.id;
 
     try {
-      const objectStorageService = new ObjectStorageService();
-      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+      const s3Service = new S3StorageService();
+      const objectPath = await s3Service.trySetObjectEntityAclPolicy(
         req.body.fileUrl,
         {
           owner: userId,
@@ -1071,6 +1060,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(200).json({ objectPath });
     } catch (error) {
       console.error("Error setting file metadata:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.status(404).json({ error: "File not found" });
+      }
       res.status(500).json({ error: "Internal server error" });
     }
   });
