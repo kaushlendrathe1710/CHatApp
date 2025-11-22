@@ -3,9 +3,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import { decryptMessage } from "@/lib/encryption";
 import type { MessageWithSender } from "@shared/schema";
-import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock, Shield, ShieldAlert, Copy, Trash2, CheckSquare, Square } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock, Shield, ShieldAlert, Copy, Trash2, CheckSquare } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MessageReactions } from "@/components/MessageReactions";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -279,28 +280,22 @@ export function ChatMessage({
 
   return (
     <div 
-      className={`flex gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} items-end`}
+      className={`flex gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} items-end ${isSelectionMode ? 'cursor-pointer' : ''}`}
       data-testid={`message-${message.id}`}
       onClick={() => isSelectionMode && onToggleSelect && onToggleSelect()}
     >
       {/* Checkbox for selection mode */}
       {isSelectionMode && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 flex-shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleSelect && onToggleSelect();
-          }}
-          data-testid={`checkbox-select-${message.id}`}
+        <div 
+          className="h-8 w-8 flex items-center justify-center flex-shrink-0"
+          onClick={(e) => e.stopPropagation()}
         >
-          {isSelected ? (
-            <CheckSquare className="h-5 w-5 text-primary" />
-          ) : (
-            <Square className="h-5 w-5" />
-          )}
-        </Button>
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => onToggleSelect && onToggleSelect()}
+            data-testid={`checkbox-select-${message.id}`}
+          />
+        </div>
       )}
       
       {/* Avatar (show only when not in selection mode) */}
@@ -324,7 +319,7 @@ export function ChatMessage({
             isOwn
               ? 'bg-primary text-primary-foreground rounded-br-sm'
               : 'bg-card border border-card-border rounded-bl-sm'
-          }`}
+          } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
         >
           {renderForwardedFromBadge()}
           {renderReplyPreview()}

@@ -1103,8 +1103,12 @@ export default function Home() {
       open={forwardDialogOpen}
       onOpenChange={(open) => {
         setForwardDialogOpen(open);
-        if (!open && isSelectionMode) {
-          handleExitSelectionMode();
+        // Clear selection state when dialog closes (whether forwarding succeeded or was cancelled)
+        if (!open) {
+          if (isSelectionMode) {
+            handleExitSelectionMode();
+          }
+          setMessageToForward(null);
         }
       }}
       messageIds={

@@ -100,7 +100,9 @@ export function ForwardMessageDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" data-testid="dialog-forward-message">
         <DialogHeader>
-          <DialogTitle>Forward message</DialogTitle>
+          <DialogTitle>
+            Forward {messageIds.length} {messageIds.length === 1 ? 'message' : 'messages'}
+          </DialogTitle>
         </DialogHeader>
         
         <ScrollArea className="max-h-96">
