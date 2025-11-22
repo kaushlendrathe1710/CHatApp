@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { WebSocketServer, WebSocket } from "ws";
+import { Server as SocketIOServer } from "socket.io";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
 import session from "express-session";
@@ -9,43 +9,20 @@ import { S3StorageService, ObjectNotFoundError, ObjectPermission } from "./s3Sto
 import { insertConversationSchema, insertMessageSchema, createGroupSchema, addParticipantSchema, updateParticipantRoleSchema } from "@shared/schema";
 import { z } from "zod";
 
-// WebSocket client tracking
-const wsClients = new Map<string, Set<WebSocket>>();
-const wsUserMap = new Map<WebSocket, string>(); // Maps WebSocket to userId
+// Socket.IO instance (initialized in registerRoutes)
+let io: SocketIOServer;
 
-// Helper function to broadcast presence updates to all active conversations
+// Track online users
+const onlineUsers = new Set<string>();
+
+// Helper function to broadcast presence updates
 function broadcastPresenceUpdate() {
-  const onlineUserIds = Array.from(new Set(wsUserMap.values()));
-  
-  // Collect unique WebSocket clients to avoid sending duplicates
-  const uniqueClients = new Set<WebSocket>();
-  wsClients.forEach((clients) => {
-    clients.forEach(client => uniqueClients.add(client));
-  });
-  
-  // Send presence update to each unique client only once
-  const presenceMessage = JSON.stringify({
-    type: 'presence',
-    data: { onlineUserIds },
-  });
-  
-  uniqueClients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(presenceMessage);
-    }
-  });
+  const onlineUserIds = Array.from(onlineUsers);
+  io.emit('presence', { onlineUserIds });
 }
 
 export function broadcastToConversation(conversationId: string, message: any) {
-  const clients = wsClients.get(conversationId);
-  if (clients) {
-    const messageStr = JSON.stringify(message);
-    clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(messageStr);
-      }
-    });
-  }
+  io.to(conversationId).emit(message.type, message.data);
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -935,15 +912,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
-      // Broadcast new message via WebSocket
+      // Broadcast new message via Socket.IO
       broadcastToConversation(conversationId, {
         type: 'message',
         data: { ...message, conversationId },
       });
 
-      // If there are active WebSocket clients (excluding sender) in the conversation, mark as delivered
-      const clients = wsClients.get(conversationId);
-      const hasRecipientOnline = clients && Array.from(clients).some(client => wsUserMap.get(client) !== userId);
+      // Check if there are active sockets in the conversation room (excluding sender)
+      const socketsInRoom = await io.in(conversationId).fetchSockets();
+      const hasRecipientOnline = socketsInRoom.length > 0;
       
       if (hasRecipientOnline) {
         await storage.updateMessageStatus(message.id, 'delivered');
@@ -1269,103 +1246,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
 
-  // Create WebSocket server with built-in path filtering for /ws
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-  console.log('[WebSocket] Server attached to /ws path');
+  // Create Socket.IO server
+  io = new SocketIOServer(httpServer, {
+    path: "/socket.io",
+    cors: {
+      origin: true,
+      credentials: true,
+    },
+  });
 
-  wss.on('connection', (ws: WebSocket, req: any) => {
-    console.log('[WebSocket] Client connected from:', req.socket.remoteAddress);
+  console.log('[Socket.IO] Server initialized');
+
+  io.on('connection', (socket) => {
+    console.log('[Socket.IO] Client connected:', socket.id);
     
+    let userId: string | undefined;
     let userConversations: string[] = [];
-    let isAlive = true;
 
-    // Heartbeat mechanism
-    ws.on('pong', () => {
-      isAlive = true;
-    });
-
-    const pingInterval = setInterval(() => {
-      if (!isAlive) {
-        console.log('[WebSocket] Client failed to respond to ping, terminating');
-        clearInterval(pingInterval);
-        return ws.terminate();
+    // Handle joining conversations
+    socket.on('join_conversations', ({ conversationIds, userId: uid }: { conversationIds: string[], userId: string }) => {
+      userId = uid;
+      
+      if (userId) {
+        onlineUsers.add(userId);
       }
-      isAlive = false;
-      ws.ping();
-    }, 30000);
 
-    ws.on('message', (data: string) => {
-      try {
-        const message = JSON.parse(data.toString());
-
-        if (message.type === 'typing') {
-          broadcastToConversation(message.data.conversationId, message);
-        } else if (message.type === 'join_conversations') {
-          const newConversationIds = message.data.conversationIds || [];
-          const userId = message.data.userId;
-
-          if (userId) {
-            wsUserMap.set(ws, userId);
-          }
-
-          if (newConversationIds.length > 0 || userConversations.length > 0) {
-            const oldSet = new Set(userConversations);
-            const newSet = new Set(newConversationIds);
-
-            const toRemove = userConversations.filter((convId: string) => !newSet.has(convId));
-            const toAdd = newConversationIds.filter((convId: string) => !oldSet.has(convId));
-
-            toRemove.forEach((convId: string) => {
-              const clients = wsClients.get(convId);
-              if (clients) {
-                clients.delete(ws);
-                if (clients.size === 0) {
-                  wsClients.delete(convId);
-                }
-              }
-            });
-
-            toAdd.forEach((convId: string) => {
-              if (!wsClients.has(convId)) {
-                wsClients.set(convId, new Set());
-              }
-              wsClients.get(convId)!.add(ws);
-            });
-
-            userConversations = newConversationIds;
-          }
-
-          broadcastPresenceUpdate();
-        } else if (message.type === 'call_signal') {
-          broadcastToConversation(message.data.conversationId, message);
-        } else if (message.type === 'call_initiate') {
-          broadcastToConversation(message.data.conversationId, message);
-        } else if (message.type === 'call_end') {
-          broadcastToConversation(message.data.conversationId, message);
-        }
-      } catch (error) {
-        console.error('Error handling WebSocket message:', error);
-      }
-    });
-
-    ws.on('close', () => {
-      clearInterval(pingInterval);
+      // Leave old conversations
       userConversations.forEach((convId) => {
-        const clients = wsClients.get(convId);
-        if (clients) {
-          clients.delete(ws);
-          if (clients.size === 0) {
-            wsClients.delete(convId);
-          }
-        }
+        socket.leave(convId);
       });
-      wsUserMap.delete(ws);
-      console.log('WebSocket client disconnected');
+
+      // Join new conversations
+      conversationIds.forEach((convId) => {
+        socket.join(convId);
+      });
+
+      userConversations = conversationIds;
       broadcastPresenceUpdate();
     });
 
-    ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
+    // Handle typing indicator
+    socket.on('typing', ({ conversationId }: { conversationId: string }) => {
+      socket.to(conversationId).emit('typing', { conversationId });
+    });
+
+    // Handle WebRTC signaling
+    socket.on('call_signal', (data) => {
+      socket.to(data.conversationId).emit('call_signal', data);
+    });
+
+    socket.on('call_initiate', (data) => {
+      socket.to(data.conversationId).emit('call_initiate', data);
+    });
+
+    socket.on('call_end', (data) => {
+      socket.to(data.conversationId).emit('call_end', data);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('[Socket.IO] Client disconnected:', socket.id);
+      if (userId) {
+        onlineUsers.delete(userId);
+      }
+      broadcastPresenceUpdate();
+    });
+
+    socket.on('error', (error) => {
+      console.error('[Socket.IO] Socket error:', error);
     });
   });
 
