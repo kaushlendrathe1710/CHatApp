@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Camera, X, RotateCw } from "lucide-react";
+import { Camera, X, RotateCw, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface CameraCaptureProps {
@@ -13,6 +13,7 @@ interface CameraCaptureProps {
 export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) {
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -43,6 +44,9 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   };
 
   const startCamera = async () => {
+    // Reset video ready state when starting camera
+    setIsVideoReady(false);
+    
     // Increment stream ID to invalidate any pending async resolutions
     const currentStreamId = ++streamIdRef.current;
     
@@ -107,8 +111,18 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
 
+    // Check if video is ready
+    if (!video.videoWidth || !video.videoHeight) {
+      toast({
+        title: "Camera Not Ready",
+        description: "Please wait for the camera to initialize before capturing.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const context = canvas.getContext('2d');
     if (!context) return;
 
     canvas.width = video.videoWidth;
@@ -150,6 +164,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
               playsInline
               muted
               className="w-full h-full object-cover"
+              onLoadedMetadata={() => setIsVideoReady(true)}
               data-testid="video-camera-preview"
             />
             <canvas ref={canvasRef} className="hidden" />
@@ -168,10 +183,20 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
             <Button
               onClick={capturePhoto}
               size="lg"
+              disabled={!isVideoReady}
               data-testid="button-capture-photo"
             >
-              <Camera className="h-5 w-5 mr-2" />
-              Capture Photo
+              {isVideoReady ? (
+                <>
+                  <Camera className="h-5 w-5 mr-2" />
+                  Capture Photo
+                </>
+              ) : (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Preparing Camera...
+                </>
+              )}
             </Button>
             <Button
               variant="outline"
