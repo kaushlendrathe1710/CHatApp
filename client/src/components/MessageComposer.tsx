@@ -145,6 +145,7 @@ export const MessageComposer = React.memo(function MessageComposer({
           fileSize: file.size,
         }
       )) as unknown as { uploadURL: string; objectKey: string };
+      console.log("Upload response received:", JSON.stringify(uploadResponse));
 
       // Upload to GCS using signed URL
       const uploadResult = await fetch(uploadResponse.uploadURL, {

@@ -192,6 +192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const result = await objectStorageService.getObjectEntityUploadURL();
+      console.log("Upload URL result:", result);
       
       res.json(result);
     } catch (error) {
