@@ -47,6 +47,7 @@ import { DisappearingMessagesSettings } from "@/components/DisappearingMessagesS
 import { CreateBroadcastDialog } from "@/components/CreateBroadcastDialog";
 import { EncryptionSetupDialog } from "@/components/EncryptionSetupDialog";
 import { VideoCallDialog } from "@/components/VideoCallDialog";
+import { UserDetailsDialog } from "@/components/UserDetailsDialog";
 import {
   getUserDisplayName,
   formatLastSeen,
@@ -109,6 +110,8 @@ export default function Home() {
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
+  const [userDetailsDialogOpen, setUserDetailsDialogOpen] = useState(false);
+  const [selectedUserForDetails, setSelectedUserForDetails] = useState<User | null>(null);
   const [callType, setCallType] = useState<"audio" | "video">("audio");
   const [isCallInitiator, setIsCallInitiator] = useState(false);
   const [incomingCallSignal, setIncomingCallSignal] = useState<any>(null);
@@ -1025,72 +1028,89 @@ export default function Home() {
                       (p) => p.userId !== user?.id
                     );
                     const isOnline = otherParticipant ? onlineUsers.has(otherParticipant.userId) : false;
+                    const isDirectMessage = !selectedConversation.isGroup && !selectedConversation.isBroadcast;
+
+                    const handleOpenUserDetails = () => {
+                      if (isDirectMessage && otherParticipant) {
+                        setSelectedUserForDetails(otherParticipant.user);
+                        setUserDetailsDialogOpen(true);
+                      }
+                    };
 
                     return (
                       <>
-                        <div className="relative flex-shrink-0">
-                          <Avatar
-                            className="h-10 w-10"
-                            data-testid="avatar-conversation-header"
-                          >
-                            <AvatarImage
-                              src={
-                                selectedConversation.avatarUrl ||
-                                (!selectedConversation.isGroup &&
-                                  otherParticipant?.user.profileImageUrl) ||
-                                undefined
-                              }
-                              style={{ objectFit: "cover" }}
-                            />
-                            <AvatarFallback>
-                              {selectedConversation.isGroup ? (
-                                <Users className="h-5 w-5" />
-                              ) : (
-                                getUserDisplayName(otherParticipant?.user || {})
-                                  .substring(0, 2)
-                                  .toUpperCase()
-                              )}
-                            </AvatarFallback>
-                          </Avatar>
-                          {!selectedConversation.isGroup && otherParticipant && (
-                            <OnlineStatus
-                              isOnline={isOnline}
-                              className="absolute bottom-0 right-0"
-                            />
-                          )}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <h2
-                            className="font-semibold truncate"
-                            data-testid="text-conversation-header-name"
-                          >
-                            {(selectedConversation.isGroup ||
-                              selectedConversation.isBroadcast) &&
-                            selectedConversation.name
-                              ? selectedConversation.name
-                              : otherParticipant
-                              ? getUserDisplayName(otherParticipant.user)
-                              : "Unknown"}
-                          </h2>
-                          {selectedConversation.isGroup ||
-                          selectedConversation.isBroadcast ? (
-                            <p className="text-xs text-muted-foreground">
-                              {selectedConversation.participants.length} members
-                            </p>
-                          ) : (
-                            <p
-                              className="text-xs text-muted-foreground"
-                              data-testid="text-user-status"
+                        <button
+                          onClick={handleOpenUserDetails}
+                          disabled={!isDirectMessage}
+                          className={`flex items-center gap-3 flex-1 min-w-0 ${
+                            isDirectMessage ? 'hover-elevate active-elevate-2 rounded-md p-1 -ml-1' : ''
+                          }`}
+                          data-testid="button-chat-header"
+                        >
+                          <div className="relative flex-shrink-0">
+                            <Avatar
+                              className="h-10 w-10"
+                              data-testid="avatar-conversation-header"
                             >
-                              {isOnline
-                                ? "online"
-                                : otherParticipant?.user.lastSeen
-                                ? `last seen ${formatLastSeen(otherParticipant.user.lastSeen)}`
-                                : "offline"}
-                            </p>
-                          )}
-                        </div>
+                              <AvatarImage
+                                src={
+                                  selectedConversation.avatarUrl ||
+                                  (!selectedConversation.isGroup &&
+                                    otherParticipant?.user.profileImageUrl) ||
+                                  undefined
+                                }
+                                style={{ objectFit: "cover" }}
+                              />
+                              <AvatarFallback>
+                                {selectedConversation.isGroup ? (
+                                  <Users className="h-5 w-5" />
+                                ) : (
+                                  getUserDisplayName(otherParticipant?.user || {})
+                                    .substring(0, 2)
+                                    .toUpperCase()
+                                )}
+                              </AvatarFallback>
+                            </Avatar>
+                            {!selectedConversation.isGroup && otherParticipant && (
+                              <OnlineStatus
+                                isOnline={isOnline}
+                                className="absolute bottom-0 right-0"
+                              />
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0 text-left">
+                            <h2
+                              className="font-semibold truncate"
+                              data-testid="text-conversation-header-name"
+                            >
+                              {(selectedConversation.isGroup ||
+                                selectedConversation.isBroadcast) &&
+                              selectedConversation.name
+                                ? selectedConversation.name
+                                : otherParticipant
+                                ? getUserDisplayName(otherParticipant.user)
+                                : "Unknown"}
+                            </h2>
+                            {selectedConversation.isGroup ||
+                            selectedConversation.isBroadcast ? (
+                              <p className="text-xs text-muted-foreground">
+                                {selectedConversation.participants.length} members
+                              </p>
+                            ) : (
+                              <p
+                                className="text-xs text-muted-foreground"
+                                data-testid="text-user-status"
+                              >
+                                {isOnline
+                                  ? "online"
+                                  : otherParticipant?.user.lastSeen
+                                  ? `last seen ${formatLastSeen(otherParticipant.user.lastSeen)}`
+                                  : "offline"}
+                              </p>
+                            )}
+                          </div>
+                        </button>
                       </>
                     );
                   })()}
@@ -1376,6 +1396,29 @@ export default function Home() {
                 )
           }
           ws={null}
+        />
+      )}
+
+      {selectedUserForDetails && (
+        <UserDetailsDialog
+          open={userDetailsDialogOpen}
+          onOpenChange={setUserDetailsDialogOpen}
+          user={selectedUserForDetails}
+          isOnline={onlineUsers.has(selectedUserForDetails.id)}
+          onStartCall={(type) => {
+            setCallType(type);
+            setIsCallInitiator(true);
+            setCallDialogOpen(true);
+            if (selectedConversationId) {
+              sendWsMessage({
+                type: "call_initiate",
+                data: {
+                  conversationId: selectedConversationId,
+                  callType: type,
+                },
+              } as any);
+            }
+          }}
         />
       )}
 
