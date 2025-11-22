@@ -1107,8 +1107,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const oldSet = new Set(userConversations);
             const newSet = new Set(newConversationIds);
             
-            const toRemove = userConversations.filter(convId => !newSet.has(convId));
-            const toAdd = newConversationIds.filter(convId => !oldSet.has(convId));
+            const toRemove = userConversations.filter((convId: string) => !newSet.has(convId));
+            const toAdd = newConversationIds.filter((convId: string) => !oldSet.has(convId));
             
             // Remove from old conversations
             toRemove.forEach(convId => {
