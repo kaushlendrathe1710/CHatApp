@@ -1311,6 +1311,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           const participant = await storage.getParticipant(convId, authenticatedUserId);
+          
           if (participant) {
             socket.join(convId);
             authorizedConversations.push(convId);
@@ -1355,7 +1356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return;
         }
 
-        if (conversation.type === 'broadcast' || conversation.isBroadcast) {
+        if (conversation.isBroadcast) {
           const canSend = await storage.canSendToBroadcast(conversationId, authenticatedUserId);
           if (!canSend) {
             socket.emit('error', { message: 'Only admins can post to broadcast channels' });
