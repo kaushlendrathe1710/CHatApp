@@ -314,57 +314,59 @@ export function ChatMessage({
           </span>
         )}
         
-        <div
-          className={`group rounded-2xl px-3 py-2 ${
-            isOwn
-              ? 'bg-primary text-primary-foreground rounded-br-sm'
-              : 'bg-card border border-card-border rounded-bl-sm'
-          } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
-        >
-          {renderForwardedFromBadge()}
-          {renderReplyPreview()}
-          {renderMessageContent()}
-          
-          <div className={`flex flex-col gap-0.5 mt-1`}>
-            <div className={`flex items-center gap-1 justify-end ${
-              isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
-            }`}>
-              {message.isEdited && (
-                <span className="text-xs italic" data-testid="text-edited-indicator">
-                  edited
-                </span>
-              )}
-              <span className="text-xs" data-testid="text-message-time">
-                {formatMessageTime(message.createdAt!)}
-              </span>
-              {renderStatusIcon()}
-            </div>
-            {getExpirationText() && (
+        {/* Wrap message bubble and action menu in group for hover */}
+        <div className="group relative flex items-start gap-1">
+          <div
+            className={`rounded-2xl px-3 py-2 ${
+              isOwn
+                ? 'bg-primary text-primary-foreground rounded-br-sm'
+                : 'bg-card border border-card-border rounded-bl-sm'
+            } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+          >
+            {renderForwardedFromBadge()}
+            {renderReplyPreview()}
+            {renderMessageContent()}
+            
+            <div className={`flex flex-col gap-0.5 mt-1`}>
               <div className={`flex items-center gap-1 justify-end ${
-                isOwn ? 'text-primary-foreground/60' : 'text-muted-foreground/80'
+                isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
               }`}>
-                <Clock className="h-3 w-3" />
-                <span className="text-xs" data-testid={`text-expiration-${message.id}`}>
-                  {getExpirationText()}
+                {message.isEdited && (
+                  <span className="text-xs italic" data-testid="text-edited-indicator">
+                    edited
+                  </span>
+                )}
+                <span className="text-xs" data-testid="text-message-time">
+                  {formatMessageTime(message.createdAt!)}
                 </span>
+                {renderStatusIcon()}
               </div>
-            )}
+              {getExpirationText() && (
+                <div className={`flex items-center gap-1 justify-end ${
+                  isOwn ? 'text-primary-foreground/60' : 'text-muted-foreground/80'
+                }`}>
+                  <Clock className="h-3 w-3" />
+                  <span className="text-xs" data-testid={`text-expiration-${message.id}`}>
+                    {getExpirationText()}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-        
-        {/* Message Actions Menu (visible on hover) */}
-        {!isEditing && (onReply || onForward || (onEdit && isOwn) || (onDelete && isOwn) || message.content) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
-                data-testid={`button-message-menu-${message.id}`}
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
+          
+          {/* Message Actions Menu (visible on hover) */}
+          {!isEditing && !isSelectionMode && (onReply || onForward || (onEdit && isOwn) || (onDelete && isOwn) || message.content) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 flex-shrink-0"
+                  data-testid={`button-message-menu-${message.id}`}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
             <DropdownMenuContent align={isOwn ? "end" : "start"}>
               {onEnterSelectionMode && !isSelectionMode && (
                 <DropdownMenuItem onClick={() => onEnterSelectionMode()} data-testid={`menu-select-${message.id}`}>
@@ -405,6 +407,7 @@ export function ChatMessage({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+        </div>
         
         {/* Reactions */}
         <MessageReactions
