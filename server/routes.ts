@@ -14,6 +14,29 @@ import { z } from "zod";
 const wsClients = new Map<string, Set<WebSocket>>();
 const wsUserMap = new Map<WebSocket, string>(); // Maps WebSocket to userId
 
+// Helper function to broadcast presence updates to all active conversations
+function broadcastPresenceUpdate() {
+  const onlineUserIds = Array.from(new Set(wsUserMap.values()));
+  
+  // Collect unique WebSocket clients to avoid sending duplicates
+  const uniqueClients = new Set<WebSocket>();
+  wsClients.forEach((clients) => {
+    clients.forEach(client => uniqueClients.add(client));
+  });
+  
+  // Send presence update to each unique client only once
+  const presenceMessage = JSON.stringify({
+    type: 'presence',
+    data: { onlineUserIds },
+  });
+  
+  uniqueClients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(presenceMessage);
+    }
+  });
+}
+
 export function broadcastToConversation(conversationId: string, message: any) {
   const clients = wsClients.get(conversationId);
   if (clients) {
@@ -1039,6 +1062,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             wsClients.get(convId)!.add(ws);
           });
+
+          // Broadcast presence update to notify everyone this user is now online
+          broadcastPresenceUpdate();
         } else if (message.type === 'call_signal') {
           // Forward WebRTC signaling data (offer, answer, ice candidate)
           broadcastToConversation(message.data.conversationId, message);
@@ -1068,6 +1094,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Remove user mapping
       wsUserMap.delete(ws);
       console.log('WebSocket client disconnected');
+
+      // Broadcast presence update to notify everyone this user is now offline
+      broadcastPresenceUpdate();
     });
 
     ws.on('error', (error) => {
