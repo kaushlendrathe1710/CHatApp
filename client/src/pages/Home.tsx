@@ -50,6 +50,7 @@ import { GroupSettingsDialog } from "@/components/GroupSettingsDialog";
 import { EncryptionSetupDialog } from "@/components/EncryptionSetupDialog";
 import { VideoCallDialog } from "@/components/VideoCallDialog";
 import { UserDetailsDialog } from "@/components/UserDetailsDialog";
+import { ViewMembersDialog } from "@/components/ViewMembersDialog";
 import {
   getUserDisplayName,
   formatLastSeen,
@@ -117,6 +118,7 @@ export default function Home() {
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [userDetailsDialogOpen, setUserDetailsDialogOpen] = useState(false);
   const [selectedUserForDetails, setSelectedUserForDetails] = useState<User | null>(null);
+  const [viewMembersDialogOpen, setViewMembersDialogOpen] = useState(false);
   const [callType, setCallType] = useState<"audio" | "video">("audio");
   const [isCallInitiator, setIsCallInitiator] = useState(false);
   const [incomingCallSignal, setIncomingCallSignal] = useState<any>(null);
@@ -1203,9 +1205,21 @@ export default function Home() {
                             </h2>
                             {selectedConversation.isGroup ||
                             selectedConversation.isBroadcast ? (
-                              <p className="text-xs text-muted-foreground">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (selectedConversation.isGroup) {
+                                    setViewMembersDialogOpen(true);
+                                  }
+                                }}
+                                className={`text-xs text-muted-foreground text-left ${
+                                  selectedConversation.isGroup ? 'hover:text-foreground cursor-pointer' : ''
+                                }`}
+                                data-testid="button-view-members"
+                                disabled={!selectedConversation.isGroup}
+                              >
                                 {selectedConversation.participants.length} members
-                              </p>
+                              </button>
                             ) : (
                               <p
                                 className="text-xs text-muted-foreground"
@@ -1581,6 +1595,15 @@ export default function Home() {
               } as any);
             }
           }}
+        />
+      )}
+
+      {selectedConversationId && (
+        <ViewMembersDialog
+          conversationId={selectedConversationId}
+          open={viewMembersDialogOpen}
+          onOpenChange={setViewMembersDialogOpen}
+          onlineUserIds={Array.from(onlineUsers)}
         />
       )}
 
