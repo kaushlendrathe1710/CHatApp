@@ -117,12 +117,31 @@ export function ForwardMessageDialog({
             ) : (
               availableConversations.map((conv) => {
                 const isSelected = selectedConversations.includes(conv.id);
-                const otherParticipant = conv.participants.find(
-                  (p) => p.userId !== currentUserId
-                );
-                const displayName = conv.isGroup
-                  ? (conv.name || `Group (${conv.participants.length} members)`)
-                  : (otherParticipant?.user ? getUserDisplayName(otherParticipant.user) : 'Unknown');
+                
+                // Filter out conversations that haven't fully loaded participant data yet
+                const otherParticipants = conv.participants.filter((p) => p.userId !== currentUserId);
+                if (!conv.isGroup && otherParticipants.length === 0) {
+                  // Skip conversations where participant data isn't loaded yet
+                  return null;
+                }
+                
+                const otherParticipant = otherParticipants[0];
+                
+                let displayName: string;
+                if (conv.isGroup) {
+                  displayName = conv.name || `Group (${conv.participants.length} members)`;
+                } else if (conv.name) {
+                  // Use conversation name if set
+                  displayName = conv.name;
+                } else if (otherParticipant?.user) {
+                  displayName = getUserDisplayName(otherParticipant.user);
+                } else if (otherParticipant?.userId) {
+                  // Fallback to user ID if user data not loaded
+                  displayName = `User (${otherParticipant.userId.slice(0, 8)}...)`;
+                } else {
+                  // Last resort fallback
+                  displayName = 'Unknown User';
+                }
 
                 return (
                   <div
