@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import { decryptMessage } from "@/lib/encryption";
 import type { MessageWithSender } from "@shared/schema";
-import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock, Shield, ShieldAlert } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock, Shield, ShieldAlert, Copy, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { MessageReactions } from "@/components/MessageReactions";
@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FilePreview } from "./FilePreview";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChatMessageProps {
   message: MessageWithSender;
@@ -28,6 +29,7 @@ interface ChatMessageProps {
   onReply?: (message: MessageWithSender) => void;
   onEdit?: (message: MessageWithSender) => void;
   onForward?: (message: MessageWithSender) => void;
+  onDelete?: (message: MessageWithSender) => void;
   isEditing?: boolean;
   editContent?: string;
   onEditContentChange?: (content: string) => void;
@@ -47,6 +49,7 @@ export function ChatMessage({
   onReply,
   onEdit,
   onForward,
+  onDelete,
   isEditing = false,
   editContent = '',
   onEditContentChange,
@@ -57,6 +60,26 @@ export function ChatMessage({
   const [decryptionError, setDecryptionError] = useState(false);
   const senderName = getUserDisplayName(message.sender);
   const initials = senderName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  const { toast } = useToast();
+
+  const handleCopyMessage = async () => {
+    const textToCopy = message.isEncrypted && decryptedContent 
+      ? decryptedContent 
+      : message.content || '';
+    
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      toast({
+        description: "Message copied to clipboard",
+      });
+    } catch (error) {
+      console.error('Failed to copy message:', error);
+      toast({
+        description: "Failed to copy message",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Decrypt message if encrypted
   useEffect(() => {
@@ -208,12 +231,12 @@ export function ChatMessage({
     if (!isOwn) return null;
 
     if (message.status === 'read') {
-      return <CheckCheck className="h-4 w-4 text-primary" data-testid="icon-read" />;
+      return <CheckCheck className="h-4 w-4 text-status-online" data-testid="icon-read" />;
     }
     if (message.status === 'delivered') {
-      return <CheckCheck className="h-4 w-4" data-testid="icon-delivered" />;
+      return <CheckCheck className="h-4 w-4 text-muted-foreground" data-testid="icon-delivered" />;
     }
-    return <Check className="h-4 w-4" data-testid="icon-sent" />;
+    return <Check className="h-4 w-4 text-muted-foreground" data-testid="icon-sent" />;
   };
 
   return (
@@ -274,7 +297,7 @@ export function ChatMessage({
         </div>
         
         {/* Message Actions Menu (visible on hover) */}
-        {!isEditing && (onReply || onForward || (onEdit && isOwn)) && (
+        {!isEditing && (onReply || onForward || (onEdit && isOwn) || (onDelete && isOwn) || message.content) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -287,6 +310,12 @@ export function ChatMessage({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align={isOwn ? "end" : "start"}>
+              {message.content && (
+                <DropdownMenuItem onClick={handleCopyMessage} data-testid={`menu-copy-${message.id}`}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy
+                </DropdownMenuItem>
+              )}
               {onReply && (
                 <DropdownMenuItem onClick={() => onReply(message)} data-testid={`menu-reply-${message.id}`}>
                   <Reply className="h-4 w-4 mr-2" />
@@ -303,6 +332,12 @@ export function ChatMessage({
                 <DropdownMenuItem onClick={() => onEdit(message)} data-testid={`menu-edit-${message.id}`}>
                   <Edit2 className="h-4 w-4 mr-2" />
                   Edit
+                </DropdownMenuItem>
+              )}
+              {onDelete && isOwn && (
+                <DropdownMenuItem onClick={() => onDelete(message)} className="text-destructive" data-testid={`menu-delete-${message.id}`}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

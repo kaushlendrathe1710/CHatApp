@@ -5,15 +5,20 @@ export type WebSocketMessage = {
   data: any;
 };
 
-export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, conversationIds?: string[]) {
+export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, conversationIds?: string[], userId?: string) {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const isConnectingRef = useRef(false);
   const conversationIdsRef = useRef(conversationIds);
+  const userIdRef = useRef(userId);
 
   useEffect(() => {
     conversationIdsRef.current = conversationIds;
   }, [conversationIds]);
+
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
 
   const connect = useCallback(() => {
     if (isConnectingRef.current || (socketRef.current && socketRef.current.readyState === WebSocket.OPEN)) {
@@ -41,7 +46,10 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
       if (conversationIdsRef.current && conversationIdsRef.current.length > 0) {
         socket.send(JSON.stringify({
           type: 'join_conversations',
-          data: { conversationIds: conversationIdsRef.current }
+          data: { 
+            conversationIds: conversationIdsRef.current,
+            userId: userIdRef.current
+          }
         }));
       }
     };
@@ -102,7 +110,10 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && conversationIds && conversationIds.length > 0) {
       socketRef.current.send(JSON.stringify({
         type: 'join_conversations',
-        data: { conversationIds }
+        data: { 
+          conversationIds,
+          userId: userIdRef.current
+        }
       }));
     }
   }, [conversationIds]);

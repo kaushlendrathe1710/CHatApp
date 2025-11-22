@@ -179,7 +179,7 @@ export default function Home() {
     } catch (error) {
       console.error('Error handling WebSocket message:', error);
     }
-  }, conversations?.map(c => c.id) || []);
+  }, conversations?.map(c => c.id) || [], user?.id);
 
   // Fetch messages for selected conversation
   const { data: messages = [], isLoading: messagesLoading } = useQuery<MessageWithSender[]>({

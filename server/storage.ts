@@ -53,11 +53,13 @@ export interface IStorage {
   
   // Message operations
   getConversationMessages(conversationId: string): Promise<MessageWithSender[]>;
+  getMessageById(messageId: string): Promise<Message | undefined>;
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessageStatus(messageId: string, status: string): Promise<void>;
   updateConversationReadStatus(conversationId: string, userId: string): Promise<void>;
   markMessagesAsRead(conversationId: string, userId: string): Promise<number>;
   updateMessage(messageId: string, content: string): Promise<Message>;
+  deleteMessage(messageId: string): Promise<{ conversationId: string }>;
   forwardMessage(messageId: string, conversationIds: string[], forwardedByUserId: string): Promise<Message[]>;
   
   // Reaction operations
@@ -363,6 +365,14 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getMessageById(messageId: string): Promise<Message | undefined> {
+    const [message] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, messageId));
+    return message;
+  }
+
   async createMessage(message: InsertMessage): Promise<Message> {
     const [newMessage] = await db.insert(messages).values(message).returning();
     
@@ -420,6 +430,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(messages.id, messageId))
       .returning();
     return updated;
+  }
+
+  async deleteMessage(messageId: string): Promise<{ conversationId: string }> {
+    // First get the message to know which conversation it belongs to
+    const [message] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, messageId));
+    
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    // Delete the message (reactions will be deleted automatically due to cascade)
+    await db.delete(messages).where(eq(messages.id, messageId));
+    
+    return { conversationId: message.conversationId };
   }
 
   async addReaction(reaction: InsertMessageReaction): Promise<MessageReaction> {

@@ -12,6 +12,7 @@ import { z } from "zod";
 
 // WebSocket client tracking
 const wsClients = new Map<string, Set<WebSocket>>();
+const wsUserMap = new Map<WebSocket, string>(); // Maps WebSocket to userId
 
 export function broadcastToConversation(conversationId: string, message: any) {
   const clients = wsClients.get(conversationId);
@@ -682,6 +683,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         data: { ...message, conversationId },
       });
 
+      // If there are active WebSocket clients (excluding sender) in the conversation, mark as delivered
+      const clients = wsClients.get(conversationId);
+      const hasRecipientOnline = clients && Array.from(clients).some(client => wsUserMap.get(client) !== userId);
+      
+      if (hasRecipientOnline) {
+        await storage.updateMessageStatus(message.id, 'delivered');
+        broadcastToConversation(conversationId, {
+          type: 'status_update',
+          data: {
+            conversationId,
+            messageId: message.id,
+            status: 'delivered',
+            userId,
+          },
+        });
+      }
+
       res.json(message);
     } catch (error) {
       console.error("Error sending message:", error);
@@ -711,6 +729,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating message:", error);
       res.status(500).json({ message: "Failed to update message" });
+    }
+  });
+
+  // Delete a message
+  app.delete('/api/messages/:messageId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { messageId } = req.params;
+
+      // Get the message directly by ID to verify it exists and check ownership
+      const message = await storage.getMessageById(messageId);
+
+      if (!message) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+
+      // Only allow users to delete their own messages
+      if (message.senderId !== userId) {
+        return res.status(403).json({ message: "You can only delete your own messages" });
+      }
+
+      const { conversationId } = await storage.deleteMessage(messageId);
+      
+      // Broadcast message deletion via WebSocket
+      broadcastToConversation(conversationId, {
+        type: 'message_deleted',
+        data: { messageId, conversationId },
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      res.status(500).json({ message: "Failed to delete message" });
     }
   });
 
@@ -975,6 +1026,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (message.type === 'join_conversations') {
           // Track which conversations this client is part of
           userConversations = message.data.conversationIds || [];
+          const userId = message.data.userId;
+          
+          // Track user ID for this WebSocket
+          if (userId) {
+            wsUserMap.set(ws, userId);
+          }
+          
           userConversations.forEach(convId => {
             if (!wsClients.has(convId)) {
               wsClients.set(convId, new Set());
@@ -1007,6 +1065,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       });
+      // Remove user mapping
+      wsUserMap.delete(ws);
       console.log('WebSocket client disconnected');
     });
 
