@@ -1,9 +1,41 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+// Custom error class to attach response data
+class ApiError extends Error {
+  status: number;
+  data: any;
+  
+  constructor(message: string, status: number, data?: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    let data: any;
+    const contentType = res.headers.get('content-type');
+    
+    try {
+      // Try to parse JSON response
+      if (contentType?.includes('application/json')) {
+        data = await res.json();
+        const message = data.message || res.statusText;
+        throw new ApiError(message, res.status, data);
+      }
+    } catch (parseError) {
+      // If JSON parsing fails, fall back to text
+      if (!(parseError instanceof ApiError)) {
+        const text = (await res.text()) || res.statusText;
+        throw new ApiError(text, res.status);
+      }
+      throw parseError;
+    }
+    
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    throw new ApiError(text, res.status);
   }
 }
 

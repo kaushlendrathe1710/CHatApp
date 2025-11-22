@@ -602,7 +602,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isGroup && userIds.length === 1) {
         // Direct conversation - check if it already exists
         const otherUserId = userIds[0];
-        conversation = await storage.getOrCreateDirectConversation(userId, otherUserId);
+        const [sortedUserId1, sortedUserId2] = [userId, otherUserId].sort();
+        
+        // Check if conversation already exists
+        const existingConversation = await storage.findDirectConversation(sortedUserId1, sortedUserId2);
+        if (existingConversation) {
+          return res.status(409).json({ 
+            message: "Chat already exists",
+            conversationId: existingConversation.id 
+          });
+        }
+        
+        // Create new conversation
+        conversation = await storage.createConversation({ isGroup: false });
+        await storage.addConversationParticipants([
+          { conversationId: conversation.id, userId },
+          { conversationId: conversation.id, userId: otherUserId },
+        ]);
       } else {
         // Group conversation or multi-user
         const convData: any = { isGroup: isGroup || userIds.length > 1, createdBy: userId };

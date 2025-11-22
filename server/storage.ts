@@ -50,6 +50,7 @@ export interface IStorage {
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   addConversationParticipants(participants: InsertConversationParticipant[]): Promise<void>;
   getOrCreateDirectConversation(userId1: string, userId2: string): Promise<Conversation>;
+  findDirectConversation(userId1: string, userId2: string): Promise<Conversation | undefined>;
   deleteConversationParticipation(conversationId: string, userId: string): Promise<void>;
   
   // Message operations
@@ -292,6 +293,65 @@ export class DatabaseStorage implements IStorage {
       { conversationId: newConv.id, userId: userId2 },
     ]);
     return newConv;
+  }
+
+  async findDirectConversation(userId1: string, userId2: string): Promise<Conversation | undefined> {
+    // Get conversation IDs where userId1 is a participant
+    const user1Convs = await db
+      .select({ conversationId: conversationParticipants.conversationId })
+      .from(conversationParticipants)
+      .where(eq(conversationParticipants.userId, userId1));
+
+    if (user1Convs.length === 0) return undefined;
+
+    // Get conversation IDs where userId2 is a participant
+    const user2Convs = await db
+      .select({ conversationId: conversationParticipants.conversationId })
+      .from(conversationParticipants)
+      .where(eq(conversationParticipants.userId, userId2));
+
+    if (user2Convs.length === 0) return undefined;
+
+    // Find intersection - conversations where BOTH users participate
+    const user1ConvIds = new Set(user1Convs.map(c => c.conversationId));
+    const commonConvIds = user2Convs
+      .map(c => c.conversationId)
+      .filter(id => user1ConvIds.has(id));
+
+    if (commonConvIds.length === 0) return undefined;
+
+    // For each common conversation, verify it's a direct chat with exactly these two users
+    for (const conversationId of commonConvIds) {
+      // Fetch conversation - must be direct (non-group)
+      const [conv] = await db
+        .select()
+        .from(conversations)
+        .where(and(
+          eq(conversations.id, conversationId),
+          eq(conversations.isGroup, false)
+        ));
+
+      if (!conv) continue;
+
+      // Get all participants for this conversation
+      const participants = await db
+        .select()
+        .from(conversationParticipants)
+        .where(eq(conversationParticipants.conversationId, conversationId));
+
+      // Must have exactly 2 participants
+      if (participants.length !== 2) continue;
+
+      // Verify the two participants are exactly userId1 and userId2
+      const participantIds = participants.map(p => p.userId).sort();
+      const targetIds = [userId1, userId2].sort();
+      
+      if (participantIds[0] === targetIds[0] && participantIds[1] === targetIds[1]) {
+        return conv;  // Found exact match!
+      }
+    }
+
+    return undefined;
   }
 
   async deleteConversationParticipation(conversationId: string, userId: string): Promise<void> {

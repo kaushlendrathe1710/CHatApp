@@ -293,7 +293,7 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
       setSelectedConversationId(data.id);
     },
-    onError: (error: Error) => {
+    onError: (error: any) => {
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
@@ -305,9 +305,30 @@ export default function Home() {
         }, 500);
         return;
       }
+      
+      // Handle 409 - Chat already exists
+      if (error.message?.includes("Chat already exists")) {
+        // Extract conversationId from error data
+        const conversationId = error.data?.conversationId;
+        
+        if (conversationId) {
+          setSelectedConversationId(conversationId);
+          toast({
+            title: "Chat already exists",
+            description: "Opening existing conversation...",
+          });
+        } else {
+          toast({
+            title: "Chat already exists",
+            description: "Please select the conversation from the list.",
+          });
+        }
+        return;
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to create conversation",
+        description: error.message || "Failed to create conversation",
         variant: "destructive",
       });
     },
