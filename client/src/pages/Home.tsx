@@ -482,10 +482,16 @@ export default function Home() {
     },
   });
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages with delay to ensure DOM update
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (messages && messages.length > 0) {
+      // Use setTimeout to ensure DOM has rendered the new message
+      const timer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [messages?.length]);
 
   // Handle scroll to detect if user is at bottom
   useEffect(() => {
