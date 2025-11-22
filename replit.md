@@ -102,6 +102,17 @@ Preferred communication style: Simple, everyday language.
 - **Error Handling**: Comprehensive loading, error, and empty states with retry functionality
 - **Testing Coverage**: All interactive elements and dynamic user data have data-testid attributes
 
+**Phase 4: Role-Based Messaging System (✅ Completed - November 2025)**
+- **User Roles**: Added `role` column to users table with three levels: `user` (default), `admin`, `super_admin`
+- **Role-Based Discovery**: Regular users can only see admins and super admins in the People page; admins/super admins see all users
+- **Conversation Restrictions**: Regular users can only create conversations with admins/super admins; attempts to chat with other regular users are blocked at the API level
+- **Visual Role Indicators**: 
+  - Super Admin badge with ShieldCheck icon (primary variant) displayed on People page and conversation list
+  - Admin badge with Shield icon (secondary variant) displayed on People page and conversation list
+- **Backend Validation**: POST /api/conversations enforces role restrictions with 403 error for unauthorized conversation attempts
+- **Storage Helper**: Added `getUsersByIds` method to storage interface for efficient role validation
+- **Existing Conversations**: All existing conversations remain functional; restrictions only apply to new conversation creation
+
 **Architecture Decisions:**
 - Media engagement tables (media_likes, media_comments) use application-level cascade instead of database foreign keys for flexibility across photo/video media types
 - ObjectKey stored alongside photoUrl enables proper GCS cleanup without orphaned storage objects

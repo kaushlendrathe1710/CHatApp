@@ -527,15 +527,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentUserRole = req.user.role || 'user';
       const { userIds, isGroup, name } = req.body;
 
+      // Validate userIds
       if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
-        return res.status(400).json({ message: "userIds is required" });
+        return res.status(400).json({ message: "At least one user ID is required" });
+      }
+
+      // Get all participant users (including for role validation)
+      const participantUsers = await storage.getUsersByIds(userIds);
+      
+      // Ensure all requested user IDs exist
+      if (participantUsers.length !== userIds.length) {
+        return res.status(400).json({ message: "One or more user IDs are invalid" });
       }
 
       // Role-based validation: Regular users can only chat with admins/super admins
       if (currentUserRole === 'user') {
-        // Get the roles of all participants
-        const participantUsers = await storage.getUsersByIds(userIds);
-        
         // Check if any participant is a regular user
         const hasRegularUser = participantUsers.some(u => u.role === 'user' || !u.role);
         
