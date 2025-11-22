@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Upload, Heart, MessageCircle, Eye, Trash2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Upload, Heart, MessageCircle, Eye, Trash2, Smile } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { UserPhoto } from "@shared/schema";
+import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 
 export default function PhotoGallery() {
   const { toast } = useToast();
@@ -17,6 +19,8 @@ export default function PhotoGallery() {
   const [uploading, setUploading] = useState(false);
   const [caption, setCaption] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const captionRef = useRef<HTMLTextAreaElement>(null);
 
   // Get current user
   const { data: user } = useQuery<any>({
@@ -129,6 +133,26 @@ export default function PhotoGallery() {
     },
   });
 
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    const textarea = captionRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newCaption = caption.substring(0, start) + emojiData.emoji + caption.substring(end);
+      setCaption(newCaption);
+      
+      // Set cursor position after emoji
+      setTimeout(() => {
+        textarea.focus();
+        const newPosition = start + emojiData.emoji.length;
+        textarea.setSelectionRange(newPosition, newPosition);
+      }, 0);
+    } else {
+      setCaption(caption + emojiData.emoji);
+    }
+    setEmojiPickerOpen(false);
+  };
+
   const handleUpload = () => {
     if (!selectedFile) {
       toast({
@@ -178,13 +202,39 @@ export default function PhotoGallery() {
               </div>
               <div>
                 <Label htmlFor="caption">Caption (optional)</Label>
-                <Textarea
-                  id="caption"
-                  placeholder="Add a caption..."
-                  value={caption}
-                  data-testid="input-caption"
-                  onChange={(e) => setCaption(e.target.value)}
-                />
+                <div className="relative">
+                  <Textarea
+                    ref={captionRef}
+                    id="caption"
+                    placeholder="Add a caption..."
+                    value={caption}
+                    data-testid="input-caption"
+                    onChange={(e) => setCaption(e.target.value)}
+                    className="pr-12"
+                  />
+                  <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-2 top-2"
+                        data-testid="button-emoji-picker"
+                      >
+                        <Smile className="h-5 w-5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 border-0" align="end">
+                      <EmojiPicker
+                        onEmojiClick={handleEmojiClick}
+                        theme={Theme.AUTO}
+                        width={350}
+                        height={400}
+                        searchPlaceholder="Search emoji..."
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
               <Button
                 onClick={handleUpload}
