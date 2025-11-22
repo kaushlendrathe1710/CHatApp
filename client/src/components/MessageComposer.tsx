@@ -1,11 +1,14 @@
 import { useState, useRef, KeyboardEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Smile, X } from "lucide-react";
+import { Paperclip, Send, Smile, X, Camera } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import type { MessageWithSender } from "@shared/schema";
 import { FileAttachmentUploader } from "./FileAttachmentUploader";
+import { CameraCapture } from "./CameraCapture";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface MessageComposerProps {
   onSendMessage: (content: string, fileData?: {
@@ -33,6 +36,7 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const [message, setMessage] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [pendingFileData, setPendingFileData] = useState<{
     fileUrl: string;
     fileName: string;
@@ -42,6 +46,7 @@ export function MessageComposer({
     type: 'image' | 'video' | 'document' | 'audio';
   } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { toast } = useToast();
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -85,6 +90,74 @@ export function MessageComposer({
 
   const handleRemoveFile = () => {
     setPendingFileData(null);
+  };
+
+  const handleCameraCapture = async (file: File) => {
+    try {
+      // Get signed upload URL from server
+      const uploadResponse = await apiRequest('POST', '/api/messages/upload-url', {
+        fileName: file.name,
+        mimeType: file.type,
+        fileSize: file.size,
+      }) as unknown as { uploadURL: string; objectKey: string };
+
+      // Upload to GCS using signed URL
+      const uploadResult = await fetch(uploadResponse.uploadURL, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      });
+
+      if (!uploadResult.ok) {
+        throw new Error('Failed to upload file to cloud storage');
+      }
+
+      // Set file metadata to public and get the public objectPath
+      const metadataResponse = await fetch('/api/objects/metadata', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          fileUrl: uploadResponse.objectKey,
+        }),
+      });
+
+      if (!metadataResponse.ok) {
+        throw new Error('Failed to set file metadata');
+      }
+
+      const { objectPath } = await metadataResponse.json();
+
+      // Store file data for sending with message - use objectPath for public URL
+      setPendingFileData({
+        fileUrl: objectPath,
+        fileName: file.name,
+        fileSize: file.size,
+        mediaObjectKey: uploadResponse.objectKey,
+        mimeType: file.type,
+        type: 'image',
+      });
+
+      toast({
+        title: "Photo Captured",
+        description: "Add a caption or send it now.",
+      });
+
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    } catch (error) {
+      console.error('Error uploading camera photo:', error);
+      toast({
+        title: "Upload Failed",
+        description: error instanceof Error ? error.message : "Failed to upload photo",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -161,6 +234,17 @@ export function MessageComposer({
           disabled={disabled}
         />
 
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => setCameraOpen(true)}
+          disabled={disabled}
+          className="flex-shrink-0"
+          data-testid="button-camera"
+        >
+          <Camera className="h-5 w-5" />
+        </Button>
+
         <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
           <PopoverTrigger asChild>
             <Button
@@ -209,6 +293,12 @@ export function MessageComposer({
           <Send className="h-5 w-5" />
         </Button>
       </div>
+
+      <CameraCapture
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={handleCameraCapture}
+      />
     </div>
   );
 }
