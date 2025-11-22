@@ -1016,98 +1016,80 @@ export default function Home() {
                         <Menu className="h-5 w-5" />
                       </Button>
 
-                  <div className="relative flex-shrink-0">
-                    <Avatar
-                      className="h-10 w-10"
-                      data-testid="avatar-conversation-header"
-                    >
-                      <AvatarImage
-                        src={
-                          selectedConversation.avatarUrl ||
-                          (!selectedConversation.isGroup &&
-                            selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )?.user.profileImageUrl) ||
-                          undefined
-                        }
-                        style={{ objectFit: "cover" }}
-                      />
-                      <AvatarFallback>
-                        {selectedConversation.isGroup ? (
-                          <Users className="h-5 w-5" />
-                        ) : (
-                          getUserDisplayName(
-                            selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )?.user || {}
-                          )
-                            .substring(0, 2)
-                            .toUpperCase()
-                        )}
-                      </AvatarFallback>
-                    </Avatar>
-                    {!selectedConversation.isGroup &&
-                      selectedConversation.participants.find(
-                        (p) => p.userId !== user?.id
-                      ) && (
-                        <OnlineStatus
-                          isOnline={onlineUsers.has(
-                            selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )!.userId
-                          )}
-                          className="absolute bottom-0 right-0"
-                        />
-                      )}
-                  </div>
+                  {(() => {
+                    const otherParticipant = selectedConversation.participants.find(
+                      (p) => p.userId !== user?.id
+                    );
+                    const isOnline = otherParticipant ? onlineUsers.has(otherParticipant.userId) : false;
 
-                  <div className="flex-1 min-w-0">
-                    <h2
-                      className="font-semibold truncate"
-                      data-testid="text-conversation-header-name"
-                    >
-                      {(selectedConversation.isGroup ||
-                        selectedConversation.isBroadcast) &&
-                      selectedConversation.name
-                        ? selectedConversation.name
-                        : selectedConversation.participants.find(
-                            (p) => p.userId !== user?.id
-                          )
-                        ? getUserDisplayName(
-                            selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )!.user
-                          )
-                        : "Unknown"}
-                    </h2>
-                    {selectedConversation.isGroup ||
-                    selectedConversation.isBroadcast ? (
-                      <p className="text-xs text-muted-foreground">
-                        {selectedConversation.participants.length} members
-                      </p>
-                    ) : (
-                      <p
-                        className="text-xs text-muted-foreground"
-                        data-testid="text-user-status"
-                      >
-                        {onlineUsers.has(
-                          selectedConversation.participants.find(
-                            (p) => p.userId !== user?.id
-                          )?.userId || ""
-                        )
-                          ? "online"
-                          : selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )?.user.lastSeen
-                          ? `last seen ${formatLastSeen(
-                              selectedConversation.participants.find(
-                                (p) => p.userId !== user?.id
-                              )!.user.lastSeen!
-                            )}`
-                          : "offline"}
-                      </p>
-                    )}
-                  </div>
+                    return (
+                      <>
+                        <div className="relative flex-shrink-0">
+                          <Avatar
+                            className="h-10 w-10"
+                            data-testid="avatar-conversation-header"
+                          >
+                            <AvatarImage
+                              src={
+                                selectedConversation.avatarUrl ||
+                                (!selectedConversation.isGroup &&
+                                  otherParticipant?.user.profileImageUrl) ||
+                                undefined
+                              }
+                              style={{ objectFit: "cover" }}
+                            />
+                            <AvatarFallback>
+                              {selectedConversation.isGroup ? (
+                                <Users className="h-5 w-5" />
+                              ) : (
+                                getUserDisplayName(otherParticipant?.user || {})
+                                  .substring(0, 2)
+                                  .toUpperCase()
+                              )}
+                            </AvatarFallback>
+                          </Avatar>
+                          {!selectedConversation.isGroup && otherParticipant && (
+                            <OnlineStatus
+                              isOnline={isOnline}
+                              className="absolute bottom-0 right-0"
+                            />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <h2
+                            className="font-semibold truncate"
+                            data-testid="text-conversation-header-name"
+                          >
+                            {(selectedConversation.isGroup ||
+                              selectedConversation.isBroadcast) &&
+                            selectedConversation.name
+                              ? selectedConversation.name
+                              : otherParticipant
+                              ? getUserDisplayName(otherParticipant.user)
+                              : "Unknown"}
+                          </h2>
+                          {selectedConversation.isGroup ||
+                          selectedConversation.isBroadcast ? (
+                            <p className="text-xs text-muted-foreground">
+                              {selectedConversation.participants.length} members
+                            </p>
+                          ) : (
+                            <p
+                              className="text-xs text-muted-foreground"
+                              data-testid="text-user-status"
+                            >
+                              {isOnline
+                                ? "online"
+                                : otherParticipant?.user.lastSeen
+                                ? `last seen ${formatLastSeen(otherParticipant.user.lastSeen)}`
+                                : "offline"}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                     <div className="flex items-center gap-1">
