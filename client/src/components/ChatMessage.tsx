@@ -179,7 +179,7 @@ export function ChatMessage({
           <Textarea
             value={editContent}
             onChange={(e) => onEditContentChange?.(e.target.value)}
-            className="min-h-[60px] resize-none"
+            className="min-h-[60px] resize-none bg-background text-foreground"
             data-testid={`input-edit-message-${message.id}`}
             autoFocus
           />
