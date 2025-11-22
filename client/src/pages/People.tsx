@@ -35,23 +35,40 @@ export default function People() {
         userIds: [userId],
         isGroup: false,
       });
-      if (!response.ok) {
-        throw new Error("Failed to create conversation");
+      
+      // Handle existing conversation (409 conflict)
+      if (response.status === 409) {
+        const data = await response.json();
+        return { ...data, isExisting: true };
       }
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to create conversation");
+      }
+      
       return response.json();
     },
     onSuccess: async (conversation) => {
       await queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
       setLocation("/dashboard");
-      toast({
-        title: "Chat started",
-        description: "You can now send messages",
-      });
+      
+      if (conversation.isExisting) {
+        toast({
+          title: "Opening chat",
+          description: "Chat already exists",
+        });
+      } else {
+        toast({
+          title: "Chat started",
+          description: "You can now send messages",
+        });
+      }
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to start chat. Please try again.",
+        description: error.message || "Failed to start chat. Please try again.",
         variant: "destructive",
       });
     },
