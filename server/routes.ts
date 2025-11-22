@@ -1303,6 +1303,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('[WebSocket] Client connected from:', req.socket.remoteAddress);
     
     let userConversations: string[] = [];
+    let isAlive = true;
+
+    // Heartbeat mechanism - pong handler
+    ws.on('pong', () => {
+      isAlive = true;
+    });
+
+    // Send ping every 30 seconds to keep connection alive
+    const pingInterval = setInterval(() => {
+      if (!isAlive) {
+        console.log('[WebSocket] Client failed to respond to ping, terminating');
+        clearInterval(pingInterval);
+        return ws.terminate();
+      }
+      isAlive = false;
+      ws.ping();
+    }, 30000);
 
     ws.on('message', (data: string) => {
       try {
@@ -1370,6 +1387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     ws.on('close', () => {
+      clearInterval(pingInterval);
       // Remove client from all conversation rooms
       userConversations.forEach(convId => {
         const clients = wsClients.get(convId);

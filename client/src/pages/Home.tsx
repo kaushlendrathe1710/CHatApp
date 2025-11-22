@@ -132,13 +132,11 @@ export default function Home() {
   const { toast } = useToast();
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
-  // Fetch conversations
+  // Fetch conversations first (needed by WebSocket hook)
   const { data: conversations = [], isLoading: conversationsLoading } =
     useQuery<ConversationWithDetails[]>({
       queryKey: ["/api/conversations"],
       enabled: !!user,
-      // Poll every 3 seconds for real-time conversation list updates
-      refetchInterval: 3000,
     });
 
   // WebSocket connection with error handling
@@ -250,14 +248,12 @@ export default function Home() {
     user?.id
   );
 
-  // Fetch messages for selected conversation
+  // Fetch messages for selected conversation (no polling, only WebSocket updates)
   const { data: messages = [], isLoading: messagesLoading } = useQuery<
     MessageWithSender[]
   >({
     queryKey: ["/api/messages", selectedConversationId],
     enabled: !!selectedConversationId,
-    // Poll every 2 seconds for real-time feel
-    refetchInterval: 2000,
   });
 
   // When a conversation is opened, invalidate conversations list after a short delay
