@@ -82,6 +82,7 @@ import {
   Trash2,
   ArrowLeft,
   Forward,
+  ChevronDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -122,8 +123,10 @@ export default function Home() {
     {}
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   // Fetch conversations
   const { data: conversations = [], isLoading: conversationsLoading } =
@@ -448,6 +451,26 @@ export default function Home() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Handle scroll to detect if user is at bottom
+  useEffect(() => {
+    const scrollViewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (!scrollViewport) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollViewport;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
+      setShowScrollToBottom(!isAtBottom);
+    };
+
+    scrollViewport.addEventListener('scroll', handleScroll);
+    return () => scrollViewport.removeEventListener('scroll', handleScroll);
+  }, [selectedConversationId]);
+
+  // Scroll to bottom function
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   // Clear reply and edit state when conversation changes
   useEffect(() => {
@@ -1202,7 +1225,8 @@ export default function Home() {
               </div>
 
               {/* Messages Area */}
-              <ScrollArea className="flex-1 p-4">
+              <div className="relative flex-1">
+                <ScrollArea ref={scrollAreaRef} className="h-full p-4">
                 {messagesLoading ? (
                   <div className="space-y-4">
                     {[...Array(3)].map((_, i) => (
@@ -1282,6 +1306,19 @@ export default function Home() {
                   </div>
                 )}
               </ScrollArea>
+
+                {/* Scroll to Bottom Button */}
+                {showScrollToBottom && !isSelectionMode && (
+                  <Button
+                    size="icon"
+                    onClick={scrollToBottom}
+                    className="absolute bottom-4 right-4 rounded-full shadow-lg z-10"
+                    data-testid="button-scroll-to-bottom"
+                  >
+                    <ChevronDown className="h-5 w-5" />
+                  </Button>
+                )}
+              </div>
 
               {/* Typing Indicator */}
               {!isSelectionMode && getTypingUsersInConversation().length > 0 && (

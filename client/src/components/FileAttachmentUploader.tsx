@@ -172,7 +172,13 @@ export function FileAttachmentUploader({ onFileUpload, disabled }: FileAttachmen
         <Paperclip className="h-5 w-5" />
       </Button>
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={isOpen} onOpenChange={(open) => {
+        if (!open) {
+          handleCancel();
+        } else {
+          setIsOpen(true);
+        }
+      }}>
         <DialogContent data-testid="dialog-file-upload">
           <DialogHeader>
             <DialogTitle>Attach File</DialogTitle>
