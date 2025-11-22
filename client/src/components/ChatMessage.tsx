@@ -3,9 +3,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import { decryptMessage } from "@/lib/encryption";
 import type { MessageWithSender } from "@shared/schema";
-import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock, Shield, ShieldAlert, Copy, Trash2 } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Reply, Edit2, MoreVertical, X, Forward, Clock, Shield, ShieldAlert, Copy, Trash2, CheckSquare } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MessageReactions } from "@/components/MessageReactions";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -35,6 +36,10 @@ interface ChatMessageProps {
   onEditContentChange?: (content: string) => void;
   onSaveEdit?: () => void;
   onCancelEdit?: () => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
+  onEnterSelectionMode?: () => void;
 }
 
 export function ChatMessage({ 
@@ -54,7 +59,11 @@ export function ChatMessage({
   editContent = '',
   onEditContentChange,
   onSaveEdit,
-  onCancelEdit
+  onCancelEdit,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+  onEnterSelectionMode
 }: ChatMessageProps) {
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
   const [decryptionError, setDecryptionError] = useState(false);
@@ -128,6 +137,36 @@ export function ChatMessage({
       <div className="text-xs text-muted-foreground italic mb-1" data-testid={`text-forwarded-from-${message.id}`}>
         <Forward className="h-3 w-3 inline mr-1" />
         Forwarded from {forwardedName}
+      </div>
+    );
+  };
+
+  const renderReplyPreview = () => {
+    if (!message.replyTo) return null;
+    
+    const repliedToName = getUserDisplayName(message.replyTo.sender);
+    const repliedContent = message.replyTo.content || 
+      (message.replyTo.type === 'image' ? 'Photo' :
+       message.replyTo.type === 'video' ? 'Video' :
+       message.replyTo.type === 'audio' ? 'Audio' :
+       message.replyTo.type === 'file' ? 'File' : 'Message');
+    
+    return (
+      <div className={`mb-2 pl-3 border-l-4 py-1 ${
+        isOwn 
+          ? 'border-primary-foreground/30 bg-primary-foreground/10' 
+          : 'border-primary/30 bg-primary/10'
+      }`} data-testid={`reply-preview-${message.id}`}>
+        <p className={`text-xs font-semibold ${
+          isOwn ? 'text-primary-foreground' : 'text-primary'
+        }`}>
+          {repliedToName}
+        </p>
+        <p className={`text-xs truncate ${
+          isOwn ? 'text-primary-foreground/80' : 'text-foreground/80'
+        }`}>
+          {repliedContent}
+        </p>
       </div>
     );
   };
@@ -241,16 +280,32 @@ export function ChatMessage({
 
   return (
     <div 
-      className={`flex gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} items-end`}
+      className={`flex gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} items-end ${isSelectionMode ? 'cursor-pointer' : ''}`}
       data-testid={`message-${message.id}`}
+      onClick={() => isSelectionMode && onToggleSelect && onToggleSelect()}
     >
-      {showAvatar && !isOwn && (
+      {/* Checkbox for selection mode */}
+      {isSelectionMode && (
+        <div 
+          className="h-8 w-8 flex items-center justify-center flex-shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => onToggleSelect && onToggleSelect()}
+            data-testid={`checkbox-select-${message.id}`}
+          />
+        </div>
+      )}
+      
+      {/* Avatar (show only when not in selection mode) */}
+      {!isSelectionMode && showAvatar && !isOwn && (
         <Avatar className="h-8 w-8 flex-shrink-0" data-testid={`avatar-${message.senderId}`}>
           <AvatarImage src={message.sender.profileImageUrl || undefined} style={{ objectFit: 'cover' }} />
           <AvatarFallback className="text-xs">{initials}</AvatarFallback>
         </Avatar>
       )}
-      {showAvatar && isOwn && <div className="h-8 w-8 flex-shrink-0" />}
+      {!isSelectionMode && showAvatar && isOwn && <div className="h-8 w-8 flex-shrink-0" />}
       
       <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[65%] gap-1`}>
         {isGroup && !isOwn && showAvatar && (
@@ -259,57 +314,66 @@ export function ChatMessage({
           </span>
         )}
         
-        <div
-          className={`group rounded-2xl px-3 py-2 ${
-            isOwn
-              ? 'bg-primary text-primary-foreground rounded-br-sm'
-              : 'bg-card border border-card-border rounded-bl-sm'
-          }`}
-        >
-          {renderForwardedFromBadge()}
-          {renderMessageContent()}
-          
-          <div className={`flex flex-col gap-0.5 mt-1`}>
-            <div className={`flex items-center gap-1 justify-end ${
-              isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
-            }`}>
-              {message.isEdited && (
-                <span className="text-xs italic" data-testid="text-edited-indicator">
-                  edited
-                </span>
-              )}
-              <span className="text-xs" data-testid="text-message-time">
-                {formatMessageTime(message.createdAt!)}
-              </span>
-              {renderStatusIcon()}
-            </div>
-            {getExpirationText() && (
+        {/* Wrap message bubble and action menu in group for hover */}
+        <div className="group relative flex items-start gap-1">
+          <div
+            className={`rounded-2xl px-3 py-2 ${
+              isOwn
+                ? 'bg-primary text-primary-foreground rounded-br-sm'
+                : 'bg-card border border-card-border rounded-bl-sm'
+            } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+          >
+            {renderForwardedFromBadge()}
+            {renderReplyPreview()}
+            {renderMessageContent()}
+            
+            <div className={`flex flex-col gap-0.5 mt-1`}>
               <div className={`flex items-center gap-1 justify-end ${
-                isOwn ? 'text-primary-foreground/60' : 'text-muted-foreground/80'
+                isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
               }`}>
-                <Clock className="h-3 w-3" />
-                <span className="text-xs" data-testid={`text-expiration-${message.id}`}>
-                  {getExpirationText()}
+                {message.isEdited && (
+                  <span className="text-xs italic" data-testid="text-edited-indicator">
+                    edited
+                  </span>
+                )}
+                <span className="text-xs" data-testid="text-message-time">
+                  {formatMessageTime(message.createdAt!)}
                 </span>
+                {renderStatusIcon()}
               </div>
-            )}
+              {getExpirationText() && (
+                <div className={`flex items-center gap-1 justify-end ${
+                  isOwn ? 'text-primary-foreground/60' : 'text-muted-foreground/80'
+                }`}>
+                  <Clock className="h-3 w-3" />
+                  <span className="text-xs" data-testid={`text-expiration-${message.id}`}>
+                    {getExpirationText()}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-        
-        {/* Message Actions Menu (visible on hover) */}
-        {!isEditing && (onReply || onForward || (onEdit && isOwn) || (onDelete && isOwn) || message.content) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
-                data-testid={`button-message-menu-${message.id}`}
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
+          
+          {/* Message Actions Menu (visible on hover) */}
+          {!isEditing && !isSelectionMode && (onReply || onForward || (onEdit && isOwn) || (onDelete && isOwn) || message.content) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 flex-shrink-0"
+                  data-testid={`button-message-menu-${message.id}`}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
             <DropdownMenuContent align={isOwn ? "end" : "start"}>
+              {onEnterSelectionMode && !isSelectionMode && (
+                <DropdownMenuItem onClick={() => onEnterSelectionMode()} data-testid={`menu-select-${message.id}`}>
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  Select
+                </DropdownMenuItem>
+              )}
               {message.content && (
                 <DropdownMenuItem onClick={handleCopyMessage} data-testid={`menu-copy-${message.id}`}>
                   <Copy className="h-4 w-4 mr-2" />
@@ -343,6 +407,7 @@ export function ChatMessage({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+        </div>
         
         {/* Reactions */}
         <MessageReactions

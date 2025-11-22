@@ -79,6 +79,8 @@ import {
   Settings,
   ImagePlus,
   Trash2,
+  ArrowLeft,
+  Share2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -110,9 +112,9 @@ export default function Home() {
   const [incomingCallSignal, setIncomingCallSignal] = useState<any>(null);
   const [deleteConversationDialogOpen, setDeleteConversationDialogOpen] = useState(false);
   const [isEncryptionEnabled, setIsEncryptionEnabled] = useState(false);
-  const [peerPublicKeys, setPeerPublicKeys] = useState<Record<string, string>>(
-    {}
-  );
+  const [peerPublicKeys, setPeerPublicKeys] = useState<Record<string, string>>({});
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
@@ -583,6 +585,78 @@ export default function Home() {
     setForwardDialogOpen(true);
   };
 
+  const handleDelete = async (message: MessageWithSender) => {
+    if (!selectedConversationId) return;
+    
+    try {
+      await apiRequest('DELETE', `/api/messages/${message.id}`);
+      queryClient.invalidateQueries({ queryKey: ['/api/messages', selectedConversationId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+      toast({
+        description: "Message deleted",
+      });
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete message",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEnterSelectionMode = (message: MessageWithSender) => {
+    setIsSelectionMode(true);
+    setSelectedMessageIds(new Set([message.id]));
+  };
+
+  const handleExitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedMessageIds(new Set());
+  };
+
+  const handleToggleMessageSelection = (messageId: string) => {
+    setSelectedMessageIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleForwardSelected = () => {
+    if (selectedMessageIds.size === 0) return;
+    setForwardDialogOpen(true);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedMessageIds.size === 0 || !selectedConversationId) return;
+    
+    try {
+      await Promise.all(
+        Array.from(selectedMessageIds).map(id => 
+          apiRequest('DELETE', `/api/messages/${id}`)
+        )
+      );
+      queryClient.invalidateQueries({ queryKey: ['/api/messages', selectedConversationId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+      toast({
+        description: `${selectedMessageIds.size} message${selectedMessageIds.size > 1 ? 's' : ''} deleted`,
+      });
+      handleExitSelectionMode();
+    } catch (error) {
+      console.error('Failed to delete messages:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete messages",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleUpdateDisappearingTimer = async (timerMs: number) => {
     if (!selectedConversationId) return;
 
@@ -899,122 +973,170 @@ export default function Home() {
                   >
                     <Menu className="h-5 w-5" />
                   </Button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div data-testid="conversations-list">
+              {filteredConversations.map((conversation) => {
+                const otherUserId = conversation.participants.find(p => p.userId !== user!.id)?.userId;
+                const isOnline = otherUserId ? onlineUsers.has(otherUserId) : false;
+                
+                return (
+                  <ConversationListItem
+                    key={conversation.id}
+                    conversation={conversation}
+                    currentUserId={user!.id}
+                    isActive={conversation.id === selectedConversationId}
+                    isOnline={!conversation.isGroup ? isOnline : undefined}
+                    onClick={() => {
+                      setSelectedConversationId(conversation.id);
+                      setIsMobileMenuOpen(false);
+                      handleExitSelectionMode();
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </ScrollArea>
+      </div>
 
-                  <div className="relative flex-shrink-0">
-                    <Avatar
-                      className="h-10 w-10"
-                      data-testid="avatar-conversation-header"
+      {/* Main Chat Area */}
+      <div className={`
+        flex-1 flex flex-col
+        ${selectedConversationId ? 'flex' : 'hidden md:flex'}
+      `}>
+        {selectedConversation ? (
+          <>
+            {/* Chat Header */}
+            <div className="h-16 border-b px-4 flex items-center justify-between gap-3 flex-shrink-0">
+              {isSelectionMode ? (
+                <>
+                  {/* Selection Mode Header */}
+                  <div className="flex items-center gap-3 flex-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleExitSelectionMode}
+                      data-testid="button-exit-selection"
                     >
-                      <AvatarImage
-                        src={
-                          selectedConversation.avatarUrl ||
-                          (!selectedConversation.isGroup &&
-                            selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )?.user.profileImageUrl) ||
-                          undefined
-                        }
-                        style={{ objectFit: "cover" }}
-                      />
-                      <AvatarFallback>
-                        {selectedConversation.isGroup ? (
-                          <Users className="h-5 w-5" />
-                        ) : (
-                          getUserDisplayName(
-                            selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )?.user || {}
-                          )
-                            .substring(0, 2)
-                            .toUpperCase()
-                        )}
-                      </AvatarFallback>
-                    </Avatar>
-                    {!selectedConversation.isGroup &&
-                      selectedConversation.participants.find(
-                        (p) => p.userId !== user?.id
-                      ) && (
-                        <OnlineStatus
-                          isOnline={onlineUsers.has(
-                            selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )!.userId
+                      <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <span className="font-semibold" data-testid="text-selected-count">
+                      {selectedMessageIds.size} selected
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="md:hidden"
+                      onClick={() => setIsMobileMenuOpen(true)}
+                      data-testid="button-mobile-menu"
+                    >
+                      <Menu className="h-5 w-5" />
+                    </Button>
+
+                    <div className="relative flex-shrink-0">
+                      <Avatar className="h-10 w-10" data-testid="avatar-conversation-header">
+                        <AvatarImage 
+                          src={
+                            selectedConversation.avatarUrl || 
+                            (!selectedConversation.isGroup && selectedConversation.participants.find(p => p.userId !== user?.id)?.user.profileImageUrl) || 
+                            undefined
+                          } 
+                          style={{ objectFit: 'cover' }}
+                        />
+                        <AvatarFallback>
+                          {selectedConversation.isGroup ? (
+                            <Users className="h-5 w-5" />
+                          ) : (
+                            getUserDisplayName(
+                              selectedConversation.participants.find(p => p.userId !== user?.id)?.user || {}
+                            ).substring(0, 2).toUpperCase()
                           )}
+                        </AvatarFallback>
+                      </Avatar>
+                      {!selectedConversation.isGroup && selectedConversation.participants.find(p => p.userId !== user?.id) && (
+                        <OnlineStatus
+                          isOnline={onlineUsers.has(selectedConversation.participants.find(p => p.userId !== user?.id)!.userId)}
                           className="absolute bottom-0 right-0"
                         />
                       )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <h2 className="font-semibold truncate" data-testid="text-conversation-header-name">
+                        {(selectedConversation.isGroup || selectedConversation.isBroadcast) && selectedConversation.name
+                          ? selectedConversation.name
+                          : selectedConversation.participants.find(p => p.userId !== user?.id)
+                            ? getUserDisplayName(selectedConversation.participants.find(p => p.userId !== user?.id)!.user)
+                            : 'Unknown'}
+                      </h2>
+                      {selectedConversation.isGroup || selectedConversation.isBroadcast ? (
+                        <p className="text-xs text-muted-foreground">
+                          {selectedConversation.participants.length} members
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground" data-testid="text-user-status">
+                          {onlineUsers.has(selectedConversation.participants.find(p => p.userId !== user?.id)?.userId || '')
+                            ? 'online'
+                            : selectedConversation.participants.find(p => p.userId !== user?.id)?.user.lastSeen
+                              ? `last seen ${formatLastSeen(selectedConversation.participants.find(p => p.userId !== user?.id)!.user.lastSeen!)}`
+                              : 'offline'}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <h2
-                      className="font-semibold truncate"
-                      data-testid="text-conversation-header-name"
-                    >
-                      {(selectedConversation.isGroup ||
-                        selectedConversation.isBroadcast) &&
-                      selectedConversation.name
-                        ? selectedConversation.name
-                        : selectedConversation.participants.find(
-                            (p) => p.userId !== user?.id
-                          )
-                        ? getUserDisplayName(
-                            selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )!.user
-                          )
-                        : "Unknown"}
-                    </h2>
-                    {selectedConversation.isGroup ||
-                    selectedConversation.isBroadcast ? (
-                      <p className="text-xs text-muted-foreground">
-                        {selectedConversation.participants.length} members
-                      </p>
-                    ) : (
-                      <p
-                        className="text-xs text-muted-foreground"
-                        data-testid="text-user-status"
-                      >
-                        {onlineUsers.has(
-                          selectedConversation.participants.find(
-                            (p) => p.userId !== user?.id
-                          )?.userId || ""
-                        )
-                          ? "online"
-                          : selectedConversation.participants.find(
-                              (p) => p.userId !== user?.id
-                            )?.user.lastSeen
-                          ? `last seen ${formatLastSeen(
-                              selectedConversation.participants.find(
-                                (p) => p.userId !== user?.id
-                              )!.user.lastSeen!
-                            )}`
-                          : "offline"}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <DisappearingMessagesSettings
-                    conversation={selectedConversation}
-                    onUpdateTimer={handleUpdateDisappearingTimer}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setCallType("audio");
-                      setIsCallInitiator(true);
-                      setCallDialogOpen(true);
-                      sendWsMessage({
-                        type: "call_initiate",
-                        data: {
-                          conversationId: selectedConversationId,
-                          callType: "audio",
-                        },
-                      } as any);
-                    }}
-                    data-testid="button-voice-call"
+                  <div className="flex items-center gap-1">
+                <DisappearingMessagesSettings
+                  conversation={selectedConversation}
+                  onUpdateTimer={handleUpdateDisappearingTimer}
+                />
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => {
+                    setCallType("audio");
+                    setIsCallInitiator(true);
+                    setCallDialogOpen(true);
+                    sendWsMessage({
+                      type: "call_initiate",
+                      data: { conversationId: selectedConversationId, callType: "audio" }
+                    } as any);
+                  }}
+                  data-testid="button-voice-call"
+                >
+                  <Phone className="h-5 w-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => {
+                    setCallType("video");
+                    setIsCallInitiator(true);
+                    setCallDialogOpen(true);
+                    sendWsMessage({
+                      type: "call_initiate",
+                      data: { conversationId: selectedConversationId, callType: "video" }
+                    } as any);
+                  }}
+                  data-testid="button-video-call"
+                >
+                  <Video className="h-5 w-5" />
+                </Button>
+                {!selectedConversation.isGroup && !selectedConversation.isBroadcast && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => setEncryptionDialogOpen(true)}
+                    data-testid="button-encryption"
+                    title="Enable End-to-End Encryption"
                   >
                     <Phone className="h-5 w-5" />
                   </Button>
@@ -1074,8 +1196,10 @@ export default function Home() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                </div>
-              </div>
+                  </div>
+                </>
+              )}
+            </div>
 
               {/* Messages Area */}
               <ScrollArea className="flex-1 p-4">
@@ -1127,39 +1251,74 @@ export default function Home() {
                                 {formatDateSeparator(message.createdAt!)}
                               </div>
                             </div>
-                          )}
-                          <ChatMessage
-                            message={message}
-                            isOwn={message.senderId === user?.id}
-                            showAvatar={showAvatar}
-                            isGroup={selectedConversation.isGroup}
-                            currentUserId={user?.id || ""}
-                            conversationId={selectedConversationId || ""}
-                            onAddReaction={handleAddReaction}
-                            onRemoveReaction={handleRemoveReaction}
-                            onReply={handleReply}
-                            onEdit={handleEdit}
-                            onForward={handleForward}
-                            isEditing={editingMessageId === message.id}
-                            editContent={editContent}
-                            onEditContentChange={setEditContent}
-                            onSaveEdit={() => handleSaveEdit(message.id)}
-                            onCancelEdit={handleCancelEdit}
-                          />
-                        </div>
-                      );
-                    })}
-                    <div ref={messagesEndRef} />
-                  </div>
-                )}
-              </ScrollArea>
+                          </div>
+                        )}
+                        <ChatMessage
+                          message={message}
+                          isOwn={message.senderId === user?.id}
+                          showAvatar={showAvatar}
+                          isGroup={selectedConversation.isGroup}
+                          currentUserId={user?.id || ''}
+                          conversationId={selectedConversationId || ''}
+                          onAddReaction={handleAddReaction}
+                          onRemoveReaction={handleRemoveReaction}
+                          onReply={handleReply}
+                          onEdit={handleEdit}
+                          onForward={handleForward}
+                          onDelete={handleDelete}
+                          isEditing={editingMessageId === message.id}
+                          editContent={editContent}
+                          onEditContentChange={setEditContent}
+                          onSaveEdit={() => handleSaveEdit(message.id)}
+                          onCancelEdit={handleCancelEdit}
+                          isSelectionMode={isSelectionMode}
+                          isSelected={selectedMessageIds.has(message.id)}
+                          onToggleSelect={() => handleToggleMessageSelection(message.id)}
+                          onEnterSelectionMode={() => handleEnterSelectionMode(message)}
+                        />
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </ScrollArea>
 
               {/* Typing Indicator */}
               {getTypingUsersInConversation().length > 0 && (
                 <TypingIndicator userNames={getTypingUsersInConversation()} />
               )}
 
-              {/* Message Composer */}
+            {/* Selection Toolbar - Bottom */}
+            {isSelectionMode && selectedMessageIds.size > 0 && (
+              <div className="border-t bg-background px-4 py-3 flex items-center justify-around gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleDeleteSelected}
+                  disabled={selectedMessageIds.size === 0}
+                  data-testid="button-delete-selected"
+                  className="flex-col h-auto gap-1"
+                >
+                  <Trash2 className="h-5 w-5" />
+                  <span className="text-xs">Delete</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleForwardSelected}
+                  disabled={selectedMessageIds.size === 0}
+                  data-testid="button-forward-selected"
+                  className="flex-col h-auto gap-1"
+                >
+                  <Share2 className="h-5 w-5" />
+                  <span className="text-xs">Forward</span>
+                </Button>
+              </div>
+            )}
+
+            {/* Message Composer - Hidden in selection mode */}
+            {!isSelectionMode && (
               <MessageComposer
                 onSendMessage={handleSendMessage}
                 onTyping={handleTyping}
@@ -1167,25 +1326,74 @@ export default function Home() {
                 replyToMessage={replyToMessage}
                 onCancelReply={handleCancelReply}
               />
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center p-8">
-              <MessageCircle className="h-20 w-20 text-muted-foreground mb-4" />
-              <h3 className="text-xl font-semibold mb-2">
-                Select a conversation
-              </h3>
-              <p className="text-muted-foreground">
-                Choose a conversation from the list to start chatting
-              </p>
-            </div>
-          )}
-        </div>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center p-8">
+            <MessageCircle className="h-20 w-20 text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold mb-2">Select a conversation</h3>
+            <p className="text-muted-foreground">
+              Choose a conversation from the list to start chatting
+            </p>
+          </div>
+        )}
       </div>
+    </div>
 
-      {/* New Conversation Dialog */}
-      <NewConversationDialog
-        users={allUsers}
-        onCreateConversation={createConversationMutation.mutate}
+    {/* New Conversation Dialog */}
+    <NewConversationDialog users={allUsers} onCreateConversation={createConversationMutation.mutate} />
+
+    {/* Forward Message Dialog */}
+    <ForwardMessageDialog
+      open={forwardDialogOpen}
+      onOpenChange={(open) => {
+        setForwardDialogOpen(open);
+        // Clear selection state when dialog closes (whether forwarding succeeded or was cancelled)
+        if (!open) {
+          if (isSelectionMode) {
+            handleExitSelectionMode();
+          }
+          setMessageToForward(null);
+        }
+      }}
+      messageIds={
+        isSelectionMode 
+          ? Array.from(selectedMessageIds)
+          : messageToForward?.id ? [messageToForward.id] : []
+      }
+      conversations={conversations}
+      currentConversationId={selectedConversationId || ''}
+      currentUserId={user?.id || ''}
+    />
+
+    <CreateBroadcastDialog
+      open={broadcastDialogOpen}
+      onOpenChange={setBroadcastDialogOpen}
+    />
+
+    <EncryptionSetupDialog
+      open={encryptionDialogOpen}
+      onOpenChange={setEncryptionDialogOpen}
+      conversationId={selectedConversationId || ''}
+      onEncryptionEnabled={() => setIsEncryptionEnabled(true)}
+    />
+
+    {selectedConversationId && (
+      <VideoCallDialog
+        open={callDialogOpen}
+        onOpenChange={setCallDialogOpen}
+        conversationId={selectedConversationId}
+        isInitiator={isCallInitiator}
+        callType={callType}
+        onSignal={(signal) => {
+          sendWsMessage({
+            type: "call_signal",
+            data: { conversationId: selectedConversationId, signal }
+          } as any);
+        }}
+        incomingSignal={incomingCallSignal}
+        callerName={selectedConversation?.isGroup ? selectedConversation.name || 'Group' : getUserDisplayName(selectedConversation?.participants.find(p => p.userId !== user?.id)?.user || {})}
+        ws={null}
       />
 
       {/* Forward Message Dialog */}

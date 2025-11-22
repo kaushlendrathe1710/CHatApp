@@ -38,11 +38,12 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 
 - **Authentication:** Passwordless email/OTP using Nodemailer with bcrypt hashing and rate limiting.
 - **Real-time Features:** WebSocket server integrated with Express, managing specific conversation rooms for broadcasting.
-- **Media Handling:** AWS S3 integration for media files using presigned URLs for secure uploads and downloads. Metadata stored separately for ACL policies.
+- **Media Handling:** AWS S3 integration for media files using presigned URLs for secure uploads and downloads. Metadata stored as separate .metadata.json files for ACL policies (owner, visibility). Upload flow: request presigned URL → upload to S3 → set ACL metadata → create photo/message. Download flow: request file via /objects/* → verify permissions → stream from S3.
 - **Encryption:** End-to-end encryption for direct messages using RSA keys stored per conversation-user pair.
 - **Privacy Controls:** User-level privacy settings for profile visibility, last seen, and online status.
 - **Role-Based Access:** `user`, `admin`, `super_admin` roles control visibility and conversation creation.
-- **WhatsApp-Like Messaging:** Visual read receipts (single, double gray, green ticks), copy/delete message functionality, online/offline presence broadcasting, camera integration for photo capture, and delete entire chat option.
+- **WhatsApp-Like Messaging:** Visual read receipts (single, double gray, green ticks), comprehensive message actions (copy, reply, forward, edit, delete) accessible via hover dropdown menu, inline reply preview within message bubbles showing quoted sender and content with left border accent, online/offline presence broadcasting, camera integration for photo capture, and delete entire chat option. Message deletion includes proper cache invalidation and toast feedback.
+- **Multi-Message Selection:** Tap-to-select mode for bulk actions on messages. Features include: selection mode entry via message action menu, visual checkboxes before message bubbles, tap message or checkbox to toggle selection, primary ring highlight on selected messages, SelectionToolbar showing count with Forward/Delete/Cancel actions, bulk forwarding via Promise.all (note: no batch API available, future improvement). Selection state clears on dialog close or conversation change.
 - **Delete Conversation:** User-scoped conversation deletion that removes the user's participation while preserving the conversation for other participants (WhatsApp-like "delete for me" behavior).
 
 ## External Dependencies
@@ -59,5 +60,5 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 - **Messages:** `/api/messages/:conversationId`, `/api/messages`, `/api/messages/:id/forward`, `/api/messages/:id/reactions`, `/api/messages/upload-url`
 - **Broadcast Channels:** `/api/broadcast/create`, `/api/broadcast/:channelId/subscribe`
 - **Encryption:** `/api/encryption/keys`, `/api/encryption/keys/:conversationId`
-- **Object Storage:** `/api/object-storage/upload`, `/api/object-storage/objects/:permission/:fileName`
-- **Photos:** `/api/photos`, `/api/photos/user/:userId`, `/api/photos/:photoId`, `/api/photos/:photoId/like`, `/api/photos/:photoId/likes`, `/api/photos/:photoId/comments`
+- **Object Storage (AWS S3):** `/api/objects/upload` (get presigned URL), `/api/objects/metadata` (set ACL), `/objects/*` (download with permissions)
+- **Photos:** `/api/photos/upload-url`, `/api/photos`, `/api/photos/user/:userId`, `/api/photos/:photoId`, `/api/photos/:photoId/like`, `/api/photos/:photoId/likes`, `/api/photos/:photoId/comments`
