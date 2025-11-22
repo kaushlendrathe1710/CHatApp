@@ -81,9 +81,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use database-level filtering for better performance
       const filteredUsers = await storage.getUsersFiltered(currentUserId, currentUserRole);
       
+      // Batch fetch all user connections in one query to avoid N+1 problem
+      const userConnections = await storage.getUserConnections(currentUserId);
+      
       // Sanitize each user's data based on their privacy settings
       const sanitizedUsers = await Promise.all(
-        filteredUsers.map(user => storage.sanitizeUserData(user, currentUserId))
+        filteredUsers.map(user => {
+          const hasConnection = userConnections.has(user.id);
+          return storage.sanitizeUserData(user, currentUserId, hasConnection);
+        })
       );
       
       res.json(sanitizedUsers);
@@ -529,7 +535,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const conversations = await storage.getUserConversations(userId);
+      // Parse pagination parameters with defaults
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = parseInt(req.query.offset as string) || 0;
+      
+      const conversations = await storage.getUserConversations(userId, limit, offset);
       res.json(conversations);
     } catch (error) {
       console.error("Error fetching conversations:", error);
