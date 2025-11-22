@@ -193,6 +193,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserConversations(userId: string): Promise<ConversationWithDetails[]> {
+    // First, get all conversation IDs for this user
+    const userConversationIds = await db
+      .select({ id: conversationParticipants.conversationId })
+      .from(conversationParticipants)
+      .where(eq(conversationParticipants.userId, userId));
+    
+    const conversationIds = userConversationIds.map(c => c.id);
+    
+    if (conversationIds.length === 0) {
+      return [];
+    }
+
+    // Get all conversations with participants in one query
     const userConvs = await db
       .select({
         conversation: conversations,
@@ -202,47 +215,74 @@ export class DatabaseStorage implements IStorage {
       .from(conversationParticipants)
       .innerJoin(conversations, eq(conversationParticipants.conversationId, conversations.id))
       .leftJoin(users, eq(conversationParticipants.userId, users.id))
-      .where(
-        inArray(
-          conversations.id,
-          db.select({ id: conversationParticipants.conversationId })
-            .from(conversationParticipants)
-            .where(eq(conversationParticipants.userId, userId))
-        )
-      )
+      .where(inArray(conversations.id, conversationIds))
       .orderBy(desc(conversations.updatedAt));
 
+    // Get all last messages in one query using DISTINCT ON
+    const lastMessages = await db.execute<any>(sql`
+      SELECT DISTINCT ON (conversation_id) *
+      FROM messages
+      WHERE conversation_id IN ${sql.raw(`(${conversationIds.map(id => `'${id}'`).join(',')})`)}
+      ORDER BY conversation_id, created_at DESC
+    `);
+
+    // Get all unread counts in one query
+    const unreadCounts = await db.execute<{ conversation_id: string; count: string }>(sql`
+      SELECT 
+        m.conversation_id,
+        COUNT(*) as count
+      FROM messages m
+      INNER JOIN conversation_participants cp 
+        ON cp.conversation_id = m.conversation_id 
+        AND cp.user_id = ${userId}
+      WHERE 
+        m.conversation_id IN ${sql.raw(`(${conversationIds.map(id => `'${id}'`).join(',')})`)}
+        AND m.created_at > COALESCE(cp.last_read_at, '1970-01-01'::timestamp)
+      GROUP BY m.conversation_id
+    `);
+
+    // Create lookup maps for faster access (convert snake_case to camelCase)
+    const lastMessageMap = new Map(
+      lastMessages.rows.map((msg: any) => [msg.conversation_id, {
+        id: msg.id,
+        conversationId: msg.conversation_id,
+        senderId: msg.sender_id,
+        content: msg.content,
+        type: msg.type,
+        status: msg.status,
+        createdAt: msg.created_at,
+        updatedAt: msg.updated_at,
+        fileUrl: msg.file_url,
+        fileName: msg.file_name,
+        fileSize: msg.file_size,
+        mimeType: msg.mime_type,
+        replyToId: msg.reply_to_id,
+        forwardedFromId: msg.forwarded_from_id,
+        forwardedByUserId: msg.forwarded_by_user_id,
+        mediaObjectKey: msg.media_object_key,
+        audioDuration: msg.audio_duration,
+        callType: msg.call_type,
+        isEdited: msg.is_edited,
+        isEncrypted: msg.is_encrypted,
+        forwardedFrom: msg.forwarded_from,
+        expiresAt: msg.expires_at,
+        callDuration: msg.call_duration,
+      }])
+    );
+    const unreadCountMap = new Map(
+      unreadCounts.rows.map(row => [row.conversation_id, Number(row.count)])
+    );
+
+    // Build conversation map
     const convMap = new Map<string, ConversationWithDetails>();
 
     for (const row of userConvs) {
       if (!convMap.has(row.conversation.id)) {
-        const lastMessage = await db
-          .select()
-          .from(messages)
-          .where(eq(messages.conversationId, row.conversation.id))
-          .orderBy(desc(messages.createdAt))
-          .limit(1);
-
-        const unreadMessages = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(messages)
-          .where(
-            and(
-              eq(messages.conversationId, row.conversation.id),
-              sql`${messages.createdAt} > COALESCE((
-                SELECT ${conversationParticipants.lastReadAt} 
-                FROM ${conversationParticipants} 
-                WHERE ${conversationParticipants.conversationId} = ${messages.conversationId} 
-                AND ${conversationParticipants.userId} = ${userId}
-              ), '1970-01-01')`
-            )
-          );
-
         convMap.set(row.conversation.id, {
           ...row.conversation,
           participants: [],
-          lastMessage: lastMessage[0],
-          unreadCount: Number(unreadMessages[0]?.count || 0),
+          lastMessage: lastMessageMap.get(row.conversation.id),
+          unreadCount: unreadCountMap.get(row.conversation.id) || 0,
         });
       }
 
