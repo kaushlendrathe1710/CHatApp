@@ -53,18 +53,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   setupAuth(app);
 
-  // Get all users (sanitized based on privacy settings)
+  // Get all users (sanitized based on privacy settings and role-based filtering)
   app.get('/api/users', isAuthenticated, async (req: any, res) => {
     try {
       const currentUserId = req.user.id;
+      const currentUserRole = req.user.role || 'user';
       const allUsers = await storage.getAllUsers();
+      
+      // Role-based filtering: Regular users can only see admins and super admins
+      let filteredUsers = allUsers
+        .filter(u => u.id !== currentUserId) // Exclude current user
+        .filter(u => u.profileVisibility !== 'hidden'); // Exclude hidden users
+      
+      // If current user is a regular user, only show admins and super admins
+      if (currentUserRole === 'user') {
+        filteredUsers = filteredUsers.filter(u => u.role === 'admin' || u.role === 'super_admin');
+      }
+      // Admins and super admins can see everyone
       
       // Sanitize each user's data based on their privacy settings
       const sanitizedUsers = await Promise.all(
-        allUsers
-          .filter(u => u.id !== currentUserId) // Exclude current user
-          .filter(u => u.profileVisibility !== 'hidden') // Exclude hidden users
-          .map(user => storage.sanitizeUserData(user, currentUserId))
+        filteredUsers.map(user => storage.sanitizeUserData(user, currentUserId))
       );
       
       res.json(sanitizedUsers);
@@ -515,11 +524,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
+      const currentUserRole = req.user.role || 'user';
       const { userIds, isGroup, name } = req.body;
 
       if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
         return res.status(400).json({ message: "userIds is required" });
       }
+
+      // Role-based validation: Regular users can only chat with admins/super admins
+      if (currentUserRole === 'user') {
+        // Get the roles of all participants
+        const participantUsers = await storage.getUsersByIds(userIds);
+        
+        // Check if any participant is a regular user
+        const hasRegularUser = participantUsers.some(u => u.role === 'user' || !u.role);
+        
+        if (hasRegularUser) {
+          return res.status(403).json({ 
+            message: "Regular users can only start conversations with admins or super admins" 
+          });
+        }
+      }
+      // Admins and super admins can create conversations with anyone
 
       let conversation: any;
 
