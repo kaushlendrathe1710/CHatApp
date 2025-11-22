@@ -1422,8 +1422,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     // Handle typing indicator
-    socket.on('typing', ({ conversationId }: { conversationId: string }) => {
-      socket.to(conversationId).emit('typing', { conversationId });
+    socket.on('typing', async ({ conversationId }: { conversationId: string }) => {
+      const authenticatedUserId = socket.data.userId;
+      
+      try {
+        const user = await storage.getUser(authenticatedUserId);
+        if (user) {
+          socket.to(conversationId).emit('typing', { 
+            conversationId,
+            userId: authenticatedUserId,
+            userName: user.fullName || user.email
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error broadcasting typing indicator:', error);
+      }
     });
 
     // Handle WebRTC signaling
