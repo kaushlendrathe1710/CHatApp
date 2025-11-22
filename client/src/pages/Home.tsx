@@ -829,7 +829,7 @@ export default function Home() {
             <div className="h-16 border-b px-4 flex items-center justify-between gap-3 flex-shrink-0">
               {isSelectionMode ? (
                 <>
-                  {/* Selection Toolbar */}
+                  {/* Selection Mode Header */}
                   <div className="flex items-center gap-3 flex-1">
                     <Button
                       variant="ghost"
@@ -842,26 +842,6 @@ export default function Home() {
                     <span className="font-semibold" data-testid="text-selected-count">
                       {selectedMessageIds.size} selected
                     </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleForwardSelected}
-                      disabled={selectedMessageIds.size === 0}
-                      data-testid="button-forward-selected"
-                    >
-                      <Share2 className="h-5 w-5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleDeleteSelected}
-                      disabled={selectedMessageIds.size === 0}
-                      data-testid="button-delete-selected"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </Button>
                   </div>
                 </>
               ) : (
@@ -1074,14 +1054,44 @@ export default function Home() {
               <TypingIndicator userNames={getTypingUsersInConversation()} />
             )}
 
-            {/* Message Composer */}
-            <MessageComposer
-              onSendMessage={handleSendMessage}
-              onTyping={handleTyping}
-              disabled={sendMessageMutation.isPending}
-              replyToMessage={replyToMessage}
-              onCancelReply={handleCancelReply}
-            />
+            {/* Selection Toolbar - Bottom */}
+            {isSelectionMode && selectedMessageIds.size > 0 && (
+              <div className="border-t bg-background px-4 py-3 flex items-center justify-around gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleDeleteSelected}
+                  disabled={selectedMessageIds.size === 0}
+                  data-testid="button-delete-selected"
+                  className="flex-col h-auto gap-1"
+                >
+                  <Trash2 className="h-5 w-5" />
+                  <span className="text-xs">Delete</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleForwardSelected}
+                  disabled={selectedMessageIds.size === 0}
+                  data-testid="button-forward-selected"
+                  className="flex-col h-auto gap-1"
+                >
+                  <Share2 className="h-5 w-5" />
+                  <span className="text-xs">Forward</span>
+                </Button>
+              </div>
+            )}
+
+            {/* Message Composer - Hidden in selection mode */}
+            {!isSelectionMode && (
+              <MessageComposer
+                onSendMessage={handleSendMessage}
+                onTyping={handleTyping}
+                disabled={sendMessageMutation.isPending}
+                replyToMessage={replyToMessage}
+                onCancelReply={handleCancelReply}
+              />
+            )}
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
