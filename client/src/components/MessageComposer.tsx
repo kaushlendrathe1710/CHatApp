@@ -136,7 +136,7 @@ export const MessageComposer = React.memo(function MessageComposer({
   const handleCameraCapture = async (file: File) => {
     try {
       // Get signed upload URL from server
-      const uploadResponse = (await apiRequest(
+      const response = await apiRequest(
         "POST",
         "/api/messages/upload-url",
         {
@@ -144,7 +144,8 @@ export const MessageComposer = React.memo(function MessageComposer({
           mimeType: file.type,
           fileSize: file.size,
         }
-      )) as unknown as { uploadURL: string; objectKey: string };
+      );
+      const uploadResponse = await response.json() as { uploadURL: string; objectKey: string };
       console.log("Upload response received:", JSON.stringify(uploadResponse));
 
       // Upload to GCS using signed URL
