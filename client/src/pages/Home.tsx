@@ -1186,6 +1186,9 @@ export default function Home() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Messages Area */}
