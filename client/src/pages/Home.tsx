@@ -798,7 +798,11 @@ export default function Home() {
         >
           {/* Sidebar Header */}
           <div className="h-16 border-b px-4 flex items-center justify-between gap-2 flex-shrink-0">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
+            <button
+              onClick={() => setLocation("/settings/privacy")}
+              className="flex items-center gap-3 flex-1 min-w-0 hover-elevate active-elevate-2 rounded-md p-1 -ml-1"
+              data-testid="button-current-user-profile"
+            >
               <Avatar className="h-10 w-10" data-testid="avatar-current-user">
                 <AvatarImage
                   src={user?.profileImageUrl || undefined}
@@ -810,7 +814,7 @@ export default function Home() {
                     : "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 text-left">
                 <h2
                   className="font-semibold truncate"
                   data-testid="text-user-name"
@@ -823,7 +827,7 @@ export default function Home() {
                   </p>
                 )}
               </div>
-            </div>
+            </button>
 
             <div className="flex items-center gap-1">
               <Button
