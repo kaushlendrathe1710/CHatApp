@@ -79,6 +79,8 @@ import {
   Settings,
   ImagePlus,
   Trash2,
+  ArrowLeft,
+  Forward,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -103,6 +105,8 @@ export default function Home() {
   const [messageToForward, setMessageToForward] =
     useState<MessageWithSender | null>(null);
   const [broadcastDialogOpen, setBroadcastDialogOpen] = useState(false);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [callType, setCallType] = useState<"audio" | "video">("audio");
@@ -583,9 +587,73 @@ export default function Home() {
     setEditContent("");
   };
 
+  const handleEnterSelectionMode = (message: MessageWithSender) => {
+    setIsSelectionMode(true);
+    setSelectedMessages(new Set([message.id]));
+  };
+
+  const handleToggleSelect = (messageId: string) => {
+    setSelectedMessages((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      
+      if (newSet.size === 0) {
+        setIsSelectionMode(false);
+      }
+      
+      return newSet;
+    });
+  };
+
+  const handleExitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedMessages(new Set());
+  };
+
   const handleForward = (message: MessageWithSender) => {
-    setMessageToForward(message);
+    handleEnterSelectionMode(message);
+  };
+
+  const handleForwardSelected = () => {
+    if (selectedMessages.size === 0) return;
     setForwardDialogOpen(true);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedMessages.size === 0) return;
+    
+    try {
+      await Promise.all(
+        Array.from(selectedMessages).map((messageId) =>
+          apiRequest("DELETE", `/api/messages/${messageId}`)
+        )
+      );
+      
+      queryClient.invalidateQueries({
+        queryKey: ["/api/messages", selectedConversationId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/conversations"],
+      });
+      
+      toast({
+        title: "Messages deleted",
+        description: `${selectedMessages.size} message${selectedMessages.size > 1 ? 's' : ''} deleted`,
+      });
+      
+      handleExitSelectionMode();
+    } catch (error) {
+      console.error("Failed to delete messages:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete messages",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDelete = async (message: MessageWithSender) => {
@@ -917,16 +985,36 @@ export default function Home() {
             <>
               {/* Chat Header */}
               <div className="h-16 border-b px-4 flex items-center justify-between gap-3 flex-shrink-0">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="md:hidden"
-                    onClick={() => setIsMobileMenuOpen(true)}
-                    data-testid="button-mobile-menu"
-                  >
-                    <Menu className="h-5 w-5" />
-                  </Button>
+                {isSelectionMode ? (
+                  <>
+                    {/* Selection Mode Header */}
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleExitSelectionMode}
+                        data-testid="button-exit-selection"
+                      >
+                        <ArrowLeft className="h-5 w-5" />
+                      </Button>
+                      <span className="font-semibold" data-testid="text-selection-count">
+                        {selectedMessages.size} selected
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Normal Header */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="md:hidden"
+                        onClick={() => setIsMobileMenuOpen(true)}
+                        data-testid="button-mobile-menu"
+                      >
+                        <Menu className="h-5 w-5" />
+                      </Button>
 
                   <div className="relative flex-shrink-0">
                     <Avatar
@@ -1022,87 +1110,89 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1">
-                  <DisappearingMessagesSettings
-                    conversation={selectedConversation}
-                    onUpdateTimer={handleUpdateDisappearingTimer}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setCallType("audio");
-                      setIsCallInitiator(true);
-                      setCallDialogOpen(true);
-                      sendWsMessage({
-                        type: "call_initiate",
-                        data: {
-                          conversationId: selectedConversationId,
-                          callType: "audio",
-                        },
-                      } as any);
-                    }}
-                    data-testid="button-voice-call"
-                  >
-                    <Phone className="h-5 w-5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setCallType("video");
-                      setIsCallInitiator(true);
-                      setCallDialogOpen(true);
-                      sendWsMessage({
-                        type: "call_initiate",
-                        data: {
-                          conversationId: selectedConversationId,
-                          callType: "video",
-                        },
-                      } as any);
-                    }}
-                    data-testid="button-video-call"
-                  >
-                    <Video className="h-5 w-5" />
-                  </Button>
-                  {!selectedConversation.isGroup &&
-                    !selectedConversation.isBroadcast && (
+                    <div className="flex items-center gap-1">
+                      <DisappearingMessagesSettings
+                        conversation={selectedConversation}
+                        onUpdateTimer={handleUpdateDisappearingTimer}
+                      />
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setEncryptionDialogOpen(true)}
-                        data-testid="button-encryption"
-                        title="Enable End-to-End Encryption"
+                        onClick={() => {
+                          setCallType("audio");
+                          setIsCallInitiator(true);
+                          setCallDialogOpen(true);
+                          sendWsMessage({
+                            type: "call_initiate",
+                            data: {
+                              conversationId: selectedConversationId,
+                              callType: "audio",
+                            },
+                          } as any);
+                        }}
+                        data-testid="button-voice-call"
                       >
-                        <Shield
-                          className={`h-5 w-5 ${
-                            isEncryptionEnabled ? "text-primary" : ""
-                          }`}
-                        />
+                        <Phone className="h-5 w-5" />
                       </Button>
-                    )}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        data-testid="button-conversation-menu"
+                        onClick={() => {
+                          setCallType("video");
+                          setIsCallInitiator(true);
+                          setCallDialogOpen(true);
+                          sendWsMessage({
+                            type: "call_initiate",
+                            data: {
+                              conversationId: selectedConversationId,
+                              callType: "video",
+                            },
+                          } as any);
+                        }}
+                        data-testid="button-video-call"
                       >
-                        <MoreVertical className="h-5 w-5" />
+                        <Video className="h-5 w-5" />
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => setDeleteConversationDialogOpen(true)}
-                        className="text-destructive focus:text-destructive"
-                        data-testid="menu-delete-conversation"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Chat
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                      {!selectedConversation.isGroup &&
+                        !selectedConversation.isBroadcast && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setEncryptionDialogOpen(true)}
+                            data-testid="button-encryption"
+                            title="Enable End-to-End Encryption"
+                          >
+                            <Shield
+                              className={`h-5 w-5 ${
+                                isEncryptionEnabled ? "text-primary" : ""
+                              }`}
+                            />
+                          </Button>
+                        )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            data-testid="button-conversation-menu"
+                          >
+                            <MoreVertical className="h-5 w-5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => setDeleteConversationDialogOpen(true)}
+                            className="text-destructive focus:text-destructive"
+                            data-testid="menu-delete-conversation"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Chat
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Messages Area */}
@@ -1174,6 +1264,10 @@ export default function Home() {
                             onEditContentChange={setEditContent}
                             onSaveEdit={() => handleSaveEdit(message.id)}
                             onCancelEdit={handleCancelEdit}
+                            isSelectionMode={isSelectionMode}
+                            isSelected={selectedMessages.has(message.id)}
+                            onToggleSelect={() => handleToggleSelect(message.id)}
+                            onEnterSelectionMode={() => handleEnterSelectionMode(message)}
                           />
                         </div>
                       );
@@ -1184,18 +1278,46 @@ export default function Home() {
               </ScrollArea>
 
               {/* Typing Indicator */}
-              {getTypingUsersInConversation().length > 0 && (
+              {!isSelectionMode && getTypingUsersInConversation().length > 0 && (
                 <TypingIndicator userNames={getTypingUsersInConversation()} />
               )}
 
+              {/* Selection Toolbar - WhatsApp Style */}
+              {isSelectionMode && (
+                <div className="border-t bg-background p-4">
+                  <div className="flex items-center justify-center gap-8">
+                    <Button
+                      variant="ghost"
+                      onClick={handleDeleteSelected}
+                      className="flex flex-col items-center gap-1"
+                      data-testid="button-delete-selected"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                      <span className="text-xs">Delete</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={handleForwardSelected}
+                      className="flex flex-col items-center gap-1"
+                      data-testid="button-forward-selected"
+                    >
+                      <Forward className="h-5 w-5" />
+                      <span className="text-xs">Forward</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Message Composer */}
-              <MessageComposer
-                onSendMessage={handleSendMessage}
-                onTyping={handleTyping}
-                disabled={sendMessageMutation.isPending}
-                replyToMessage={replyToMessage}
-                onCancelReply={handleCancelReply}
-              />
+              {!isSelectionMode && (
+                <MessageComposer
+                  onSendMessage={handleSendMessage}
+                  onTyping={handleTyping}
+                  disabled={sendMessageMutation.isPending}
+                  replyToMessage={replyToMessage}
+                  onCancelReply={handleCancelReply}
+                />
+              )}
             </>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -1220,8 +1342,13 @@ export default function Home() {
       {/* Forward Message Dialog */}
       <ForwardMessageDialog
         open={forwardDialogOpen}
-        onOpenChange={setForwardDialogOpen}
-        messageIds={messageToForward?.id ? [messageToForward.id] : []}
+        onOpenChange={(open) => {
+          setForwardDialogOpen(open);
+          if (!open) {
+            handleExitSelectionMode();
+          }
+        }}
+        messageIds={Array.from(selectedMessages)}
         conversations={conversations}
         currentConversationId={selectedConversationId || ""}
         currentUserId={user?.id || ""}
