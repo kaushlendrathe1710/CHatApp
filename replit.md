@@ -128,6 +128,26 @@ Preferred communication style: Simple, everyday language.
 - **Auto-Focus Enhancement**: Message input field automatically receives focus after sending messages for seamless typing flow
 - **Code Cleanup**: Removed debug console.log statements from production code
 
+**Phase 7: WhatsApp-Like File Upload System (✅ Completed - November 22, 2025)**
+- **Database Schema**: Extended messages table with `mediaObjectKey` (varchar) and `mimeType` (varchar) columns for file attachment support
+- **Backend API**: 
+  - Added POST /api/messages/upload-url endpoint for generating signed GCS upload URLs and object keys
+  - Integrated with existing /api/objects/metadata endpoint for setting public ACL
+  - Files served through /objects/:objectPath(*) endpoint with access control
+- **Frontend Components**:
+  - **FileAttachmentUploader**: Dialog-based file uploader with type/size validation (max 50MB), supports images/videos/documents/audio
+  - **FilePreview**: Smart preview component with image modal, video/audio players, and document download UI
+  - **MessageComposer**: Enhanced with pending file state, file preview with remove button, send button enabled for attachment-only or captioned messages
+- **Upload Flow**: Three-phase upload (get signed URL → upload to GCS → set metadata to public) ensures secure file handling
+- **File Features**:
+  - Send files without captions (attachment-only messages)
+  - Send files with text captions (encrypted in E2E chats while file metadata stays plaintext)
+  - File preview before sending with remove option
+  - Smart file type detection and appropriate UI (image thumbnails, video players, audio players, document downloads)
+  - File size display and validation
+  - Progress indicators and comprehensive error handling
+- **Security**: Files stored with public ACL for easy preview/download, user ownership tracked via object storage ACL system
+
 **Architecture Decisions:**
 - Media engagement tables (media_likes, media_comments) use application-level cascade instead of database foreign keys for flexibility across photo/video media types
 - ObjectKey stored alongside photoUrl enables proper GCS cleanup without orphaned storage objects
