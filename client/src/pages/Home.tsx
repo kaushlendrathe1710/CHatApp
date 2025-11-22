@@ -114,8 +114,6 @@ export default function Home() {
   const [peerPublicKeys, setPeerPublicKeys] = useState<Record<string, string>>(
     {}
   );
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
@@ -586,69 +584,8 @@ export default function Home() {
   };
 
   const handleForward = (message: MessageWithSender) => {
-    // Enter selection mode and select this message
-    setIsSelectionMode(true);
-    setSelectedMessageIds(new Set([message.id]));
-  };
-
-  const handleEnterSelectionMode = (message: MessageWithSender) => {
-    setIsSelectionMode(true);
-    setSelectedMessageIds(new Set([message.id]));
-  };
-
-  const handleExitSelectionMode = () => {
-    setIsSelectionMode(false);
-    setSelectedMessageIds(new Set());
-  };
-
-  const handleToggleMessageSelection = (messageId: string) => {
-    setSelectedMessageIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(messageId)) {
-        newSet.delete(messageId);
-      } else {
-        newSet.add(messageId);
-      }
-      return newSet;
-    });
-  };
-
-  const handleForwardSelected = () => {
-    if (selectedMessageIds.size === 0) return;
+    setMessageToForward(message);
     setForwardDialogOpen(true);
-  };
-
-  const handleDeleteSelected = async () => {
-    if (selectedMessageIds.size === 0) return;
-
-    try {
-      await Promise.all(
-        Array.from(selectedMessageIds).map((messageId) =>
-          apiRequest("DELETE", `/api/messages/${messageId}`)
-        )
-      );
-      
-      queryClient.invalidateQueries({
-        queryKey: ["/api/messages", selectedConversationId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/conversations"],
-      });
-      
-      toast({
-        title: "Messages deleted",
-        description: `${selectedMessageIds.size} message${selectedMessageIds.size > 1 ? 's' : ''} deleted`,
-      });
-      
-      handleExitSelectionMode();
-    } catch (error) {
-      console.error("Failed to delete messages:", error);
-      toast({
-        title: "Error",
-        description: "Failed to delete messages",
-        variant: "destructive",
-      });
-    }
   };
 
   const handleDelete = async (message: MessageWithSender) => {
@@ -980,38 +917,18 @@ export default function Home() {
             <>
               {/* Chat Header */}
               <div className="h-16 border-b px-4 flex items-center justify-between gap-3 flex-shrink-0">
-                {isSelectionMode ? (
-                  <>
-                    {/* Selection Mode Header */}
-                    <div className="flex items-center gap-3 flex-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleExitSelectionMode}
-                        data-testid="button-exit-selection"
-                      >
-                        <ArrowLeft className="h-5 w-5" />
-                      </Button>
-                      <span className="font-semibold" data-testid="text-selected-count">
-                        {selectedMessageIds.size} selected
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {/* Normal Header */}
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="md:hidden"
-                        onClick={() => setIsMobileMenuOpen(true)}
-                        data-testid="button-mobile-menu"
-                      >
-                        <Menu className="h-5 w-5" />
-                      </Button>
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden"
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    data-testid="button-mobile-menu"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </Button>
 
-                      <div className="relative flex-shrink-0">
+                  <div className="relative flex-shrink-0">
                     <Avatar
                       className="h-10 w-10"
                       data-testid="avatar-conversation-header"
@@ -1186,9 +1103,6 @@ export default function Home() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-                    </div>
-                  </>
-                )}
               </div>
 
               {/* Messages Area */}
@@ -1306,17 +1220,8 @@ export default function Home() {
       {/* Forward Message Dialog */}
       <ForwardMessageDialog
         open={forwardDialogOpen}
-        onOpenChange={(open) => {
-          setForwardDialogOpen(open);
-          if (!open && isSelectionMode) {
-            handleExitSelectionMode();
-          }
-        }}
-        messageIds={
-          isSelectionMode 
-            ? Array.from(selectedMessageIds)
-            : messageToForward?.id ? [messageToForward.id] : []
-        }
+        onOpenChange={setForwardDialogOpen}
+        messageIds={messageToForward?.id ? [messageToForward.id] : []}
         conversations={conversations}
         currentConversationId={selectedConversationId || ""}
         currentUserId={user?.id || ""}
