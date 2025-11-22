@@ -844,7 +844,7 @@ export default function Home() {
         {/* Sidebar - Chat List */}
         <div
           className={`
-        w-full md:w-96 border-r flex flex-col
+        w-full md:w-96 border-r border-border flex flex-col bg-background
         ${
           isMobileMenuOpen || !selectedConversationId
             ? "flex"
@@ -1255,7 +1255,7 @@ export default function Home() {
               </div>
 
               {/* Messages Area */}
-              <div className="relative flex-1">
+              <div className="relative flex-1 overflow-hidden">
                 <ScrollArea ref={scrollAreaRef} className="h-full p-4">
                 {messagesLoading ? (
                   <div className="space-y-4">

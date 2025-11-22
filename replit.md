@@ -46,6 +46,8 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 - **Multi-Message Selection:** Tap-to-select mode for bulk actions on messages. Features include: selection mode entry via message action menu, visual checkboxes before message bubbles, tap message or checkbox to toggle selection, primary ring highlight on selected messages, bulk forwarding via Promise.all (note: no batch API available, future improvement). Selection state clears on dialog close or conversation change.
 - **WhatsApp-Style Selection Toolbar:** When messages are selected, the UI enters a dedicated selection mode with: (1) Top header showing back arrow and selection count (e.g., "3 selected"), (2) Bottom action toolbar with Delete and Forward buttons (icon + text labels), (3) MessageComposer hidden during selection. Action buttons positioned at bottom for better mobile accessibility, matching WhatsApp UX exactly.
 - **Delete Conversation:** User-scoped conversation deletion that removes the user's participation while preserving the conversation for other participants (WhatsApp-like "delete for me" behavior).
+- **Unread Count Badge:** Instantly clears when opening a conversation. Frontend invalidates conversation list 300ms after opening to sync with backend's read status update.
+- **Sidebar Visibility:** Enhanced sidebar with explicit border and background colors for better visibility on desktop. Chat history is fully scrollable with proper overflow handling.
 
 ## External Dependencies
 
