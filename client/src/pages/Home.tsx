@@ -133,6 +133,8 @@ export default function Home() {
     useQuery<ConversationWithDetails[]>({
       queryKey: ["/api/conversations"],
       enabled: !!user,
+      // Poll every 10 seconds as fallback if WebSocket fails
+      refetchInterval: 10000,
     });
 
   // WebSocket connection with error handling

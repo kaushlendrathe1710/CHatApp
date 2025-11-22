@@ -26,20 +26,32 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     }
 
     isConnectingRef.current = true;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    // Construct WebSocket URL relative to current origin
+    // This works correctly in Replit and other reverse proxy environments
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+    
+    console.log('[WebSocket] Connecting to:', wsUrl);
+    console.log('[WebSocket] Location:', {
+      protocol: window.location.protocol,
+      host: window.location.host,
+      hostname: window.location.hostname,
+      port: window.location.port,
+      href: window.location.href,
+    });
     
     let socket: WebSocket;
     try {
       socket = new WebSocket(wsUrl);
     } catch (error) {
-      console.error('Failed to create WebSocket:', error);
+      console.error('[WebSocket] Failed to create WebSocket:', error);
       isConnectingRef.current = false;
       return;
     }
 
     socket.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('[WebSocket] Connected successfully');
       isConnectingRef.current = false;
       
       // Join conversations after connecting
@@ -64,12 +76,16 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     };
 
     socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      console.error('[WebSocket] Error:', error);
       isConnectingRef.current = false;
     };
 
-    socket.onclose = () => {
-      console.log('WebSocket disconnected');
+    socket.onclose = (event) => {
+      console.log('[WebSocket] Disconnected:', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
       isConnectingRef.current = false;
       socketRef.current = null;
       

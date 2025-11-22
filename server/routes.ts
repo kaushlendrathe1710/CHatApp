@@ -1070,11 +1070,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
 
+  // Log upgrade events to debug WebSocket connection issues
+  httpServer.on('upgrade', (request, socket, head) => {
+    console.log('[WebSocket] Upgrade request received:', {
+      url: request.url,
+      headers: {
+        origin: request.headers.origin,
+        host: request.headers.host,
+        upgrade: request.headers.upgrade,
+      },
+    });
+  });
+
   // WebSocket server for real-time messaging
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
+  console.log('[WebSocket] Server initialized on path /ws');
+
   wss.on('connection', (ws: WebSocket, req: any) => {
-    console.log('WebSocket client connected');
+    console.log('[WebSocket] Client connected from:', req.socket.remoteAddress);
     
     let userConversations: string[] = [];
 
