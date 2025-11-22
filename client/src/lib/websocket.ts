@@ -27,19 +27,11 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
 
     isConnectingRef.current = true;
     
-    // Construct WebSocket URL relative to current origin
-    // Using root path with ?app=1 param to distinguish from Vite HMR (?token=...)
+    // Construct WebSocket URL with dedicated /ws path
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/?app=1`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
     
     console.log('[WebSocket] Connecting to:', wsUrl);
-    console.log('[WebSocket] Location:', {
-      protocol: window.location.protocol,
-      host: window.location.host,
-      hostname: window.location.hostname,
-      port: window.location.port,
-      href: window.location.href,
-    });
     
     let socket: WebSocket;
     try {

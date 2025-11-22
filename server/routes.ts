@@ -1269,35 +1269,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
 
-  // WebSocket server for real-time messaging (noServer mode for manual upgrade handling)
-  const wss = new WebSocketServer({ noServer: true });
-
-  console.log('[WebSocket] Server initialized with manual upgrade handling');
-
-  // Manually handle WebSocket upgrade requests to /ws path
-  httpServer.on('upgrade', (request, socket, head) => {
-    console.log('[WebSocket] Upgrade request received:', {
-      url: request.url,
-      headers: {
-        origin: request.headers.origin,
-        host: request.headers.host,
-        upgrade: request.headers.upgrade,
-      },
-    });
-
-    const url = request.url || '';
-    
-    // Only handle our application WebSocket (identified by ?app=1 query param, not Vite HMR ?token=...)
-    if (url.includes('?app=1')) {
-      console.log('[WebSocket] Handling application WebSocket upgrade for:', url);
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
-      });
-    } else {
-      console.log('[WebSocket] Skipping upgrade for:', url, '(likely Vite HMR or other)');
-    }
-    // Let other upgrade requests (like Vite HMR with ?token=...) pass through
-  });
+  // Create WebSocket server with built-in path filtering for /ws
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  console.log('[WebSocket] Server attached to /ws path');
 
   wss.on('connection', (ws: WebSocket, req: any) => {
     console.log('[WebSocket] Client connected from:', req.socket.remoteAddress);
@@ -1305,12 +1279,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let userConversations: string[] = [];
     let isAlive = true;
 
-    // Heartbeat mechanism - pong handler
+    // Heartbeat mechanism
     ws.on('pong', () => {
       isAlive = true;
     });
 
-    // Send ping every 30 seconds to keep connection alive
     const pingInterval = setInterval(() => {
       if (!isAlive) {
         console.log('[WebSocket] Client failed to respond to ping, terminating');
@@ -1324,29 +1297,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ws.on('message', (data: string) => {
       try {
         const message = JSON.parse(data.toString());
-        
+
         if (message.type === 'typing') {
-          // Broadcast typing indicator
           broadcastToConversation(message.data.conversationId, message);
         } else if (message.type === 'join_conversations') {
           const newConversationIds = message.data.conversationIds || [];
           const userId = message.data.userId;
-          
-          // Track user ID for this WebSocket
+
           if (userId) {
             wsUserMap.set(ws, userId);
           }
 
-          // Only update subscriptions if we have a valid conversation list
           if (newConversationIds.length > 0 || userConversations.length > 0) {
-            // Calculate which conversations to remove (in old but not in new)
             const oldSet = new Set(userConversations);
             const newSet = new Set(newConversationIds);
-            
+
             const toRemove = userConversations.filter((convId: string) => !newSet.has(convId));
             const toAdd = newConversationIds.filter((convId: string) => !oldSet.has(convId));
-            
-            // Remove from old conversations
+
             toRemove.forEach((convId: string) => {
               const clients = wsClients.get(convId);
               if (clients) {
@@ -1356,29 +1324,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
               }
             });
-            
-            // Add to new conversations
+
             toAdd.forEach((convId: string) => {
               if (!wsClients.has(convId)) {
                 wsClients.set(convId, new Set());
               }
               wsClients.get(convId)!.add(ws);
             });
-            
-            // Update the tracked conversation list
+
             userConversations = newConversationIds;
           }
 
-          // Broadcast presence update to notify everyone this user is now online
           broadcastPresenceUpdate();
         } else if (message.type === 'call_signal') {
-          // Forward WebRTC signaling data (offer, answer, ice candidate)
           broadcastToConversation(message.data.conversationId, message);
         } else if (message.type === 'call_initiate') {
-          // Notify other participant(s) of incoming call
           broadcastToConversation(message.data.conversationId, message);
         } else if (message.type === 'call_end') {
-          // Notify participants that call ended
           broadcastToConversation(message.data.conversationId, message);
         }
       } catch (error) {
@@ -1388,8 +1350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     ws.on('close', () => {
       clearInterval(pingInterval);
-      // Remove client from all conversation rooms
-      userConversations.forEach(convId => {
+      userConversations.forEach((convId) => {
         const clients = wsClients.get(convId);
         if (clients) {
           clients.delete(ws);
@@ -1398,11 +1359,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       });
-      // Remove user mapping
       wsUserMap.delete(ws);
       console.log('WebSocket client disconnected');
-
-      // Broadcast presence update to notify everyone this user is now offline
       broadcastPresenceUpdate();
     });
 
