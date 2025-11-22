@@ -252,6 +252,19 @@ export default function Home() {
     enabled: !!selectedConversationId,
   });
 
+  // When a conversation is opened, invalidate conversations list after a short delay
+  // to allow the backend to mark messages as read and update unread count
+  useEffect(() => {
+    if (selectedConversationId) {
+      // Small delay to ensure backend has processed the read status
+      const timer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [selectedConversationId]);
+
   // Fetch encryption keys for selected conversation
   const { data: encryptionKeys = [] } = useQuery<
     Array<{ userId: string; publicKey: string }>
