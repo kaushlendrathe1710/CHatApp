@@ -98,12 +98,15 @@ export function ForwardMessageDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md" data-testid="dialog-forward-message">
+      <DialogContent className="max-w-md" data-testid="dialog-forward-message" aria-describedby="forward-dialog-description">
         <DialogHeader>
           <DialogTitle>
             Forward {messageIds.length} {messageIds.length === 1 ? 'message' : 'messages'}
           </DialogTitle>
         </DialogHeader>
+        <p id="forward-dialog-description" className="sr-only">
+          Select conversations to forward the selected messages to
+        </p>
         
         <ScrollArea className="max-h-96">
           <div className="space-y-1">
