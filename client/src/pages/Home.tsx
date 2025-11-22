@@ -17,6 +17,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ConversationListItem } from "@/components/ConversationListItem";
@@ -50,6 +66,7 @@ import {
   Shield,
   Settings,
   ImagePlus,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -73,6 +90,7 @@ export default function Home() {
   const [callType, setCallType] = useState<"audio" | "video">("audio");
   const [isCallInitiator, setIsCallInitiator] = useState(false);
   const [incomingCallSignal, setIncomingCallSignal] = useState<any>(null);
+  const [deleteConversationDialogOpen, setDeleteConversationDialogOpen] = useState(false);
   const [isEncryptionEnabled, setIsEncryptionEnabled] = useState(false);
   const [peerPublicKeys, setPeerPublicKeys] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -290,6 +308,40 @@ export default function Home() {
       toast({
         title: "Error",
         description: "Failed to create conversation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete conversation mutation
+  const deleteConversationMutation = useMutation({
+    mutationFn: async (conversationId: string) => {
+      return apiRequest('DELETE', `/api/conversations/${conversationId}`, undefined);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+      setSelectedConversationId(null);
+      setDeleteConversationDialogOpen(false);
+      toast({
+        title: "Chat deleted",
+        description: "The conversation has been removed from your chat list.",
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to delete conversation",
         variant: "destructive",
       });
     },
@@ -788,9 +840,23 @@ export default function Home() {
                     <Shield className={`h-5 w-5 ${isEncryptionEnabled ? 'text-primary' : ''}`} />
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" data-testid="button-conversation-menu">
-                  <MoreVertical className="h-5 w-5" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" data-testid="button-conversation-menu">
+                      <MoreVertical className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => setDeleteConversationDialogOpen(true)}
+                      className="text-destructive focus:text-destructive"
+                      data-testid="menu-delete-conversation"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Chat
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -928,6 +994,31 @@ export default function Home() {
         ws={null}
       />
     )}
+
+    {/* Delete Conversation Confirmation Dialog */}
+    <AlertDialog open={deleteConversationDialogOpen} onOpenChange={setDeleteConversationDialogOpen}>
+      <AlertDialogContent data-testid="dialog-delete-conversation">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Chat?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will remove this conversation from your chat list. This action cannot be undone.
+            {selectedConversation?.isGroup || selectedConversation?.isBroadcast
+              ? " Other participants will still be able to see the conversation."
+              : " The other person will still be able to see the conversation."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => selectedConversationId && deleteConversationMutation.mutate(selectedConversationId)}
+            className="bg-destructive hover:bg-destructive/90"
+            data-testid="button-confirm-delete"
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </>
   );
 }

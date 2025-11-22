@@ -50,6 +50,7 @@ export interface IStorage {
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   addConversationParticipants(participants: InsertConversationParticipant[]): Promise<void>;
   getOrCreateDirectConversation(userId1: string, userId2: string): Promise<Conversation>;
+  deleteConversationParticipation(conversationId: string, userId: string): Promise<void>;
   
   // Message operations
   getConversationMessages(conversationId: string): Promise<MessageWithSender[]>;
@@ -291,6 +292,28 @@ export class DatabaseStorage implements IStorage {
       { conversationId: newConv.id, userId: userId2 },
     ]);
     return newConv;
+  }
+
+  async deleteConversationParticipation(conversationId: string, userId: string): Promise<void> {
+    // Remove user from conversation participants
+    await db
+      .delete(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conversationId),
+          eq(conversationParticipants.userId, userId)
+        )
+      );
+
+    // Clean up user's encryption key for this conversation
+    await db
+      .delete(encryptionKeys)
+      .where(
+        and(
+          eq(encryptionKeys.conversationId, conversationId),
+          eq(encryptionKeys.userId, userId)
+        )
+      );
   }
 
   // Message operations

@@ -629,6 +629,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete conversation (remove user's participation)
+  app.delete('/api/conversations/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+
+      // Verify conversation exists
+      const conversation = await storage.getConversation(id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      // Verify user is a participant
+      const userConversations = await storage.getUserConversations(userId);
+      const isParticipant = userConversations.some(conv => conv.id === id);
+      
+      if (!isParticipant) {
+        return res.status(403).json({ message: "You are not a participant in this conversation" });
+      }
+
+      // Delete user's participation (removes participant record and encryption key)
+      await storage.deleteConversationParticipation(id, userId);
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+      res.status(500).json({ message: "Failed to delete conversation" });
+    }
+  });
+
   // Get messages for a conversation
   app.get('/api/messages/:conversationId', isAuthenticated, async (req: any, res) => {
     try {
