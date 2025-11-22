@@ -128,10 +128,8 @@ export function FileAttachmentUploader({ onFileUpload, disabled }: FileAttachmen
         type: getFileType(selectedFile.type),
       };
 
-      toast({
-        title: "File uploaded",
-        description: "Your file has been uploaded successfully",
-      });
+      // Don't show toast here - file is ready but not sent yet
+      // Success toast will show when message is actually sent
 
       onFileUpload(fileData);
       setIsOpen(false);
