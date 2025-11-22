@@ -1111,7 +1111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const toAdd = newConversationIds.filter((convId: string) => !oldSet.has(convId));
             
             // Remove from old conversations
-            toRemove.forEach(convId => {
+            toRemove.forEach((convId: string) => {
               const clients = wsClients.get(convId);
               if (clients) {
                 clients.delete(ws);
@@ -1122,7 +1122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
             
             // Add to new conversations
-            toAdd.forEach(convId => {
+            toAdd.forEach((convId: string) => {
               if (!wsClients.has(convId)) {
                 wsClients.set(convId, new Set());
               }
