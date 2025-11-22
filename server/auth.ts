@@ -13,6 +13,7 @@ declare global {
         email: string;
         username?: string;
         isRegistered: boolean;
+        role?: string;
       };
     }
   }
@@ -37,6 +38,7 @@ export async function isAuthenticated(req: Request, res: Response, next: NextFun
           email: user.email,
           username: user.username,
           isRegistered: user.isRegistered,
+          role: user.role,
         };
         next();
       } else {
