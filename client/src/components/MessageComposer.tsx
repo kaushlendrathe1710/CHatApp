@@ -1,4 +1,4 @@
-import { useState, useRef, KeyboardEvent } from "react";
+import { useState, useRef, KeyboardEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Paperclip, Send, Smile, X } from "lucide-react";
@@ -43,6 +43,13 @@ export function MessageComposer({
   } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-focus input on mount
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, []);
+
   const handleSend = () => {
     // Allow sending if message has content OR if file is attached
     if (!disabled && (message.trim() || pendingFileData)) {
@@ -51,8 +58,13 @@ export function MessageComposer({
       setPendingFileData(null);
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
-        textareaRef.current.focus();
       }
+      // Use setTimeout to ensure focus happens after any re-renders
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+        }
+      }, 0);
     }
   };
 
