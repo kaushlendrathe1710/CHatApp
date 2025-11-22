@@ -35,6 +35,7 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   status: text("status").default("Available"),
   role: text("role").default("user").notNull(), // user, admin, super_admin
+  isSystemAdmin: boolean("is_system_admin").default(false).notNull(), // Non-deletable system admin flag
   lastSeen: timestamp("last_seen").defaultNow(),
   isRegistered: boolean("is_registered").default(false).notNull(),
   // Privacy settings
@@ -52,6 +53,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
   lastSeen: true,
   isRegistered: true,
+  isSystemAdmin: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
