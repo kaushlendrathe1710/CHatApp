@@ -13,7 +13,7 @@ import { Check } from "lucide-react";
 interface ForwardMessageDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  messageId: string;
+  messageIds: string[];
   conversations: ConversationWithDetails[];
   currentConversationId: string;
   currentUserId: string;
@@ -22,7 +22,7 @@ interface ForwardMessageDialogProps {
 export function ForwardMessageDialog({
   open,
   onOpenChange,
-  messageId,
+  messageIds,
   conversations,
   currentConversationId,
   currentUserId,
@@ -53,14 +53,27 @@ export function ForwardMessageDialog({
       return;
     }
 
+    if (messageIds.length === 0) {
+      toast({
+        title: "No messages to forward",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsForwarding(true);
     try {
-      await apiRequest('POST', `/api/messages/${messageId}/forward`, {
-        conversationIds: selectedConversations,
-      });
+      // Forward each message to the selected conversations
+      await Promise.all(
+        messageIds.map(messageId =>
+          apiRequest('POST', `/api/messages/${messageId}/forward`, {
+            conversationIds: selectedConversations,
+          })
+        )
+      );
 
       toast({
-        title: "Message forwarded",
+        title: `${messageIds.length} message${messageIds.length > 1 ? 's' : ''} forwarded`,
         description: `Forwarded to ${selectedConversations.length} conversation${selectedConversations.length > 1 ? 's' : ''}`,
       });
 
@@ -74,7 +87,7 @@ export function ForwardMessageDialog({
     } catch (error) {
       console.error("Error forwarding message:", error);
       toast({
-        title: "Failed to forward message",
+        title: "Failed to forward messages",
         description: "Please try again",
         variant: "destructive",
       });

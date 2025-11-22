@@ -1101,8 +1101,17 @@ export default function Home() {
     {/* Forward Message Dialog */}
     <ForwardMessageDialog
       open={forwardDialogOpen}
-      onOpenChange={setForwardDialogOpen}
-      messageId={messageToForward?.id || ''}
+      onOpenChange={(open) => {
+        setForwardDialogOpen(open);
+        if (!open && isSelectionMode) {
+          handleExitSelectionMode();
+        }
+      }}
+      messageIds={
+        isSelectionMode 
+          ? Array.from(selectedMessageIds)
+          : messageToForward?.id ? [messageToForward.id] : []
+      }
       conversations={conversations}
       currentConversationId={selectedConversationId || ''}
       currentUserId={user?.id || ''}
