@@ -784,7 +784,7 @@ export default function Home() {
 
   return (
     <>
-      <div className="h-screen flex overflow-hidden bg-background">
+      <div className="fixed inset-0 flex overflow-hidden bg-background">
         {/* Sidebar - Chat List */}
         <div
           className={`
