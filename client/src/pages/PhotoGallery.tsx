@@ -252,11 +252,15 @@ export default function PhotoGallery() {
       {photos.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
-            <div className="text-center py-12">
+            <button
+              onClick={() => setUploadDialogOpen(true)}
+              className="w-full text-center py-12 hover-elevate active-elevate-2 rounded-md"
+              data-testid="button-empty-state-upload"
+            >
               <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-4 text-lg font-semibold">No photos yet</h3>
               <p className="text-muted-foreground">Upload your first photo to get started</p>
-            </div>
+            </button>
           </CardContent>
         </Card>
       ) : (
