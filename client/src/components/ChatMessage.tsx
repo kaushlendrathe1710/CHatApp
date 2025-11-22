@@ -132,6 +132,36 @@ export function ChatMessage({
     );
   };
 
+  const renderReplyPreview = () => {
+    if (!message.replyTo) return null;
+    
+    const repliedToName = getUserDisplayName(message.replyTo.sender);
+    const repliedContent = message.replyTo.content || 
+      (message.replyTo.type === 'image' ? 'Photo' :
+       message.replyTo.type === 'video' ? 'Video' :
+       message.replyTo.type === 'audio' ? 'Audio' :
+       message.replyTo.type === 'file' ? 'File' : 'Message');
+    
+    return (
+      <div className={`mb-2 pl-3 border-l-4 py-1 ${
+        isOwn 
+          ? 'border-primary-foreground/30 bg-primary-foreground/10' 
+          : 'border-primary/30 bg-primary/10'
+      }`} data-testid={`reply-preview-${message.id}`}>
+        <p className={`text-xs font-semibold ${
+          isOwn ? 'text-primary-foreground' : 'text-primary'
+        }`}>
+          {repliedToName}
+        </p>
+        <p className={`text-xs truncate ${
+          isOwn ? 'text-primary-foreground/80' : 'text-foreground/80'
+        }`}>
+          {repliedContent}
+        </p>
+      </div>
+    );
+  };
+
   const renderMessageContent = () => {
     // If editing, show textarea
     if (isEditing && message.type === 'text') {
@@ -267,6 +297,7 @@ export function ChatMessage({
           }`}
         >
           {renderForwardedFromBadge()}
+          {renderReplyPreview()}
           {renderMessageContent()}
           
           <div className={`flex flex-col gap-0.5 mt-1`}>
