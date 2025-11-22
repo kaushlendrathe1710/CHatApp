@@ -35,6 +35,7 @@ export function MessageComposer({
       setMessage("");
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
+        textareaRef.current.focus();
       }
     }
   };
@@ -69,7 +70,7 @@ export function MessageComposer({
         <div className="mb-2 flex items-center gap-2 bg-muted p-2 rounded-md" data-testid="reply-preview">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-muted-foreground">
-              Replying to {replyToMessage.sender.firstName || replyToMessage.sender.email}
+              Replying to {replyToMessage.sender.fullName || replyToMessage.sender.email}
             </p>
             <p className="text-sm truncate">{replyToMessage.content}</p>
           </div>

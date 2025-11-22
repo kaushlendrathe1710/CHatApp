@@ -120,6 +120,14 @@ Preferred communication style: Simple, everyday language.
 - **Schema Update**: isSystemAdmin field excluded from public insert schemas to prevent unauthorized creation
 - **Database Record**: System admin created with ID c4d8ce21-00b3-447f-a401-7b221c1d8dd4
 
+**Phase 6: Bug Fixes & UX Improvements (✅ Completed - November 22, 2025)**
+- **Critical Auth Bug Fix**: Fixed `isAuthenticated` middleware not including `role` field in session, causing super admins to be treated as regular users
+  - Added `role` to Express Request type definition
+  - Updated middleware to include `user.role` in session object
+  - All users now properly authenticated with correct role permissions
+- **Auto-Focus Enhancement**: Message input field automatically receives focus after sending messages for seamless typing flow
+- **Code Cleanup**: Removed debug console.log statements from production code
+
 **Architecture Decisions:**
 - Media engagement tables (media_likes, media_comments) use application-level cascade instead of database foreign keys for flexibility across photo/video media types
 - ObjectKey stored alongside photoUrl enables proper GCS cleanup without orphaned storage objects
