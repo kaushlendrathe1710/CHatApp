@@ -352,4 +352,18 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+
+  /* Message highlight animation for jump-to-reply */
+  @keyframes messageHighlight {
+    0% {
+      background-color: hsl(var(--primary) / 0.2);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  .message-highlight {
+    animation: messageHighlight 2s ease-out;
+  }
 }

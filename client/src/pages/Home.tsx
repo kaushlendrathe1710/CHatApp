@@ -581,6 +581,23 @@ export default function Home() {
     setReplyToMessage(null);
   };
 
+  const handleJumpToReply = () => {
+    if (!replyToMessage) return;
+    
+    // Find the message element
+    const messageElement = document.querySelector(`[data-message-id="${replyToMessage.id}"]`);
+    if (messageElement) {
+      // Scroll to the message
+      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      // Add highlight animation
+      messageElement.classList.add('message-highlight');
+      setTimeout(() => {
+        messageElement.classList.remove('message-highlight');
+      }, 2000);
+    }
+  };
+
   const handleEdit = (message: MessageWithSender) => {
     setEditingMessageId(message.id);
     setEditContent(message.content || "");
@@ -1359,6 +1376,7 @@ export default function Home() {
                   disabled={sendMessageMutation.isPending}
                   replyToMessage={replyToMessage}
                   onCancelReply={handleCancelReply}
+                  onJumpToReply={handleJumpToReply}
                 />
               )}
             </>

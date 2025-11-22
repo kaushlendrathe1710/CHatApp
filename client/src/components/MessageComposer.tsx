@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Smile, X, Camera } from "lucide-react";
+import { Paperclip, Send, Smile, X, Camera, Image as ImageIcon, FileText, Reply } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -37,6 +37,7 @@ interface MessageComposerProps {
   placeholder?: string;
   replyToMessage?: MessageWithSender | null;
   onCancelReply?: () => void;
+  onJumpToReply?: () => void;
 }
 
 export const MessageComposer = React.memo(function MessageComposer({
@@ -46,6 +47,7 @@ export const MessageComposer = React.memo(function MessageComposer({
   placeholder = "Type a message...",
   replyToMessage,
   onCancelReply,
+  onJumpToReply,
 }: MessageComposerProps) {
   const [message, setMessage] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -244,15 +246,38 @@ export const MessageComposer = React.memo(function MessageComposer({
     <div className="border-t bg-background p-4">
       {replyToMessage && (
         <div
-          className="mb-2 flex items-center gap-2 bg-muted p-2 rounded-md"
+          className="mb-2 flex items-start gap-2 bg-accent/50 border-l-4 border-l-primary p-3 rounded-md cursor-pointer hover-elevate transition-colors"
+          onClick={onJumpToReply}
           data-testid="reply-preview"
         >
+          <Reply className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground">
-              Replying to{" "}
-              {replyToMessage.sender.fullName || replyToMessage.sender.email}
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-xs font-medium text-primary">
+                {replyToMessage.sender.fullName || replyToMessage.sender.email?.split('@')[0] || 'User'}
+              </p>
+              {replyToMessage.type === 'image' && (
+                <ImageIcon className="h-3 w-3 text-muted-foreground" />
+              )}
+              {replyToMessage.type === 'file' && (
+                <FileText className="h-3 w-3 text-muted-foreground" />
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground truncate">
+              {replyToMessage.type === 'image' ? (
+                <span className="flex items-center gap-1">
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  Photo
+                </span>
+              ) : replyToMessage.type === 'file' ? (
+                <span className="flex items-center gap-1">
+                  <FileText className="h-3.5 w-3.5" />
+                  {replyToMessage.fileName || 'File'}
+                </span>
+              ) : (
+                replyToMessage.content || 'Message'
+              )}
             </p>
-            <p className="text-sm truncate">{replyToMessage.content}</p>
           </div>
           <Button
             size="icon"

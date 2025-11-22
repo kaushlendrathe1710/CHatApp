@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatMessageTime, getUserDisplayName } from "@/lib/formatters";
 import { decryptMessage } from "@/lib/encryption";
@@ -42,7 +42,7 @@ interface ChatMessageProps {
   onEnterSelectionMode?: () => void;
 }
 
-export function ChatMessage({ 
+function ChatMessageComponent({ 
   message, 
   isOwn, 
   showAvatar = true, 
@@ -282,6 +282,7 @@ export function ChatMessage({
     <div 
       className={`flex gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} items-end ${isSelectionMode ? 'cursor-pointer' : ''}`}
       data-testid={`message-${message.id}`}
+      data-message-id={message.id}
       onClick={() => isSelectionMode && onToggleSelect && onToggleSelect()}
     >
       {/* Checkbox for selection mode */}
@@ -422,3 +423,7 @@ export function ChatMessage({
     </div>
   );
 }
+
+// Memoize to prevent unnecessary re-renders when parent state changes
+// Using default shallow comparison to ensure all message updates render correctly
+export const ChatMessage = memo(ChatMessageComponent);
