@@ -16,9 +16,23 @@ let io: SocketIOServer;
 const onlineUsers = new Set<string>();
 
 // Helper function to broadcast presence updates
-function broadcastPresenceUpdate() {
+async function broadcastPresenceUpdate() {
   const onlineUserIds = Array.from(onlineUsers);
-  io.emit('presence', { onlineUserIds });
+  
+  // Filter out users who have disabled online status visibility
+  const visibleOnlineUserIds: string[] = [];
+  for (const userId of onlineUserIds) {
+    try {
+      const user = await storage.getUser(userId);
+      if (user && user.onlineStatusVisibility) {
+        visibleOnlineUserIds.push(userId);
+      }
+    } catch (error) {
+      console.error('[Socket.IO] Error checking user privacy:', error);
+    }
+  }
+  
+  io.emit('presence', { onlineUserIds: visibleOnlineUserIds });
 }
 
 export function broadcastToConversation(conversationId: string, message: any) {
@@ -1289,6 +1303,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     onlineUsers.add(userId);
 
     console.log('[Socket.IO] Client connected:', socket.id, 'User:', userId);
+    
+    // Broadcast presence update immediately when user connects
+    broadcastPresenceUpdate();
     
     let userConversations: string[] = [];
 
