@@ -38,7 +38,7 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 
 - **Authentication:** Passwordless email/OTP using Nodemailer with bcrypt hashing and rate limiting.
 - **Real-time Features:** WebSocket server integrated with Express, managing specific conversation rooms for broadcasting.
-- **Media Handling:** AWS S3 integration for media files using presigned URLs for secure uploads and downloads. Metadata stored separately for ACL policies.
+- **Media Handling:** AWS S3 integration for media files using presigned URLs for secure uploads and downloads. Metadata stored as separate .metadata.json files for ACL policies (owner, visibility). Upload flow: request presigned URL → upload to S3 → set ACL metadata → create photo/message. Download flow: request file via /objects/* → verify permissions → stream from S3.
 - **Encryption:** End-to-end encryption for direct messages using RSA keys stored per conversation-user pair.
 - **Privacy Controls:** User-level privacy settings for profile visibility, last seen, and online status.
 - **Role-Based Access:** `user`, `admin`, `super_admin` roles control visibility and conversation creation.
@@ -59,5 +59,5 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 - **Messages:** `/api/messages/:conversationId`, `/api/messages`, `/api/messages/:id/forward`, `/api/messages/:id/reactions`, `/api/messages/upload-url`
 - **Broadcast Channels:** `/api/broadcast/create`, `/api/broadcast/:channelId/subscribe`
 - **Encryption:** `/api/encryption/keys`, `/api/encryption/keys/:conversationId`
-- **Object Storage:** `/api/object-storage/upload`, `/api/object-storage/objects/:permission/:fileName`
-- **Photos:** `/api/photos`, `/api/photos/user/:userId`, `/api/photos/:photoId`, `/api/photos/:photoId/like`, `/api/photos/:photoId/likes`, `/api/photos/:photoId/comments`
+- **Object Storage (AWS S3):** `/api/objects/upload` (get presigned URL), `/api/objects/metadata` (set ACL), `/objects/*` (download with permissions)
+- **Photos:** `/api/photos/upload-url`, `/api/photos`, `/api/photos/user/:userId`, `/api/photos/:photoId`, `/api/photos/:photoId/like`, `/api/photos/:photoId/likes`, `/api/photos/:photoId/comments`
