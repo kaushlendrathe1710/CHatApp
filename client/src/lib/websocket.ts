@@ -28,9 +28,9 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     isConnectingRef.current = true;
     
     // Construct WebSocket URL relative to current origin
-    // This works correctly in Replit and other reverse proxy environments
+    // Using root path with ?app=1 param to distinguish from Vite HMR (?token=...)
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/?app=1`;
     
     console.log('[WebSocket] Connecting to:', wsUrl);
     console.log('[WebSocket] Location:', {

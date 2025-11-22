@@ -1070,7 +1070,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
 
-  // Log upgrade events to debug WebSocket connection issues
+  // WebSocket server for real-time messaging (noServer mode for manual upgrade handling)
+  const wss = new WebSocketServer({ noServer: true });
+
+  console.log('[WebSocket] Server initialized with manual upgrade handling');
+
+  // Manually handle WebSocket upgrade requests to /ws path
   httpServer.on('upgrade', (request, socket, head) => {
     console.log('[WebSocket] Upgrade request received:', {
       url: request.url,
@@ -1080,12 +1085,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         upgrade: request.headers.upgrade,
       },
     });
+
+    const url = request.url || '';
+    
+    // Only handle our application WebSocket (identified by ?app=1 query param, not Vite HMR ?token=...)
+    if (url.includes('?app=1')) {
+      console.log('[WebSocket] Handling application WebSocket upgrade for:', url);
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      console.log('[WebSocket] Skipping upgrade for:', url, '(likely Vite HMR or other)');
+    }
+    // Let other upgrade requests (like Vite HMR with ?token=...) pass through
   });
-
-  // WebSocket server for real-time messaging
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-
-  console.log('[WebSocket] Server initialized on path /ws');
 
   wss.on('connection', (ws: WebSocket, req: any) => {
     console.log('[WebSocket] Client connected from:', req.socket.remoteAddress);
