@@ -1023,6 +1023,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Rename group conversation (admin only)
+  app.patch('/api/conversations/:id/name', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+      const { name } = req.body;
+
+      if (!name || typeof name !== 'string' || name.trim().length === 0) {
+        return res.status(400).json({ message: "Valid group name is required" });
+      }
+
+      // Verify conversation exists and is a group
+      const conversation = await storage.getConversation(id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      if (!conversation.isGroup) {
+        return res.status(400).json({ message: "This is not a group conversation" });
+      }
+
+      // Check if user has permission (system admin or group admin)
+      const isSystemAdmin = userRole === 'admin' || userRole === 'super_admin';
+      const isGroupAdmin = await storage.isGroupAdmin(id, userId);
+
+      if (!isSystemAdmin && !isGroupAdmin) {
+        return res.status(403).json({ message: "Only admins can rename groups" });
+      }
+
+      // Update group name
+      const updatedConversation = await storage.updateConversationName(id, name.trim());
+
+      // Broadcast name change to all participants
+      broadcastToConversation(id, {
+        type: 'conversation_updated',
+        data: { conversationId: id, name: updatedConversation.name },
+      });
+
+      res.json(updatedConversation);
+    } catch (error) {
+      console.error("Error renaming group:", error);
+      res.status(500).json({ message: "Failed to rename group" });
+    }
+  });
+
   // Get messages for a conversation
   app.get('/api/messages/:conversationId', isAuthenticated, async (req: any, res) => {
     try {

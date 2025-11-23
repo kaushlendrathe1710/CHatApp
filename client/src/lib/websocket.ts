@@ -132,6 +132,13 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
       }
     });
 
+    eventSource.addEventListener('conversation_updated', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'conversation_updated', data });
+      }
+    });
+
     eventSource.addEventListener('call_signal', (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {

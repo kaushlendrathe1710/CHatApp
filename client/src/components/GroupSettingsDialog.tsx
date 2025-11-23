@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -12,9 +13,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useQuery } from "@tanstack/react-query";
-import { Settings, MoreVertical, UserPlus, Crown, UserMinus } from "lucide-react";
-import type { User, ConversationParticipant } from "@shared/schema";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Settings, MoreVertical, UserPlus, Crown, UserMinus, Pencil, Check, X } from "lucide-react";
+import type { User, ConversationParticipant, Conversation } from "@shared/schema";
 
 interface GroupSettingsDialogProps {
   open: boolean;
@@ -35,7 +36,15 @@ export function GroupSettingsDialog({
 }: GroupSettingsDialogProps) {
   const [showAddParticipant, setShowAddParticipant] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
   const { toast } = useToast();
+
+  // Fetch conversation details for current name
+  const { data: conversation } = useQuery<Conversation>({
+    queryKey: ["/api/conversations", conversationId],
+    enabled: open,
+  });
 
   // Fetch group participants
   const { data: participants = [], isLoading: isLoadingParticipants } = useQuery<ParticipantWithUser[]>({
@@ -144,6 +153,51 @@ export function GroupSettingsDialog({
     }
   };
 
+  const renameMutation = useMutation({
+    mutationFn: async (newName: string) => {
+      return await apiRequest("PATCH", `/api/conversations/${conversationId}/name`, { name: newName });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Group renamed",
+        description: "Group name has been updated",
+      });
+      setIsEditingName(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId] });
+    },
+    onError: (error: any) => {
+      console.error("Error renaming group:", error);
+      toast({
+        title: "Failed to rename group",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleStartEdit = () => {
+    setEditedName(conversation?.name || "");
+    setIsEditingName(true);
+  };
+
+  const handleSaveRename = () => {
+    if (editedName.trim().length === 0) {
+      toast({
+        title: "Invalid name",
+        description: "Group name cannot be empty",
+        variant: "destructive",
+      });
+      return;
+    }
+    renameMutation.mutate(editedName.trim());
+  };
+
+  const handleCancelRename = () => {
+    setIsEditingName(false);
+    setEditedName("");
+  };
+
   const getInitials = (user: User) => {
     if (user.fullName) {
       return user.fullName
@@ -174,6 +228,65 @@ export function GroupSettingsDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Group Name Section */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Group Name</h3>
+            {isEditingName ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  placeholder="Enter group name"
+                  disabled={renameMutation.isPending}
+                  data-testid="input-group-name"
+                  className="flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSaveRename();
+                    } else if (e.key === "Escape") {
+                      handleCancelRename();
+                    }
+                  }}
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleSaveRename}
+                  disabled={renameMutation.isPending}
+                  data-testid="button-save-group-name"
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleCancelRename}
+                  disabled={renameMutation.isPending}
+                  data-testid="button-cancel-group-name"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2 p-2 rounded-md border">
+                <span className="text-sm" data-testid="text-group-name">
+                  {conversation?.name || "Unnamed Group"}
+                </span>
+                {isAdmin && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleStartEdit}
+                    data-testid="button-edit-group-name"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Participants Section */}
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium">
               Participants ({participants.length})

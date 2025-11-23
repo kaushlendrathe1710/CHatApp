@@ -52,6 +52,7 @@ export interface IStorage {
   getOrCreateDirectConversation(userId1: string, userId2: string): Promise<Conversation>;
   findDirectConversation(userId1: string, userId2: string): Promise<Conversation | undefined>;
   deleteConversationParticipation(conversationId: string, userId: string): Promise<void>;
+  updateConversationName(conversationId: string, name: string): Promise<Conversation>;
   
   // Message operations
   getConversationMessages(conversationId: string): Promise<MessageWithSender[]>;
@@ -386,6 +387,16 @@ export class DatabaseStorage implements IStorage {
           eq(encryptionKeys.userId, userId)
         )
       );
+  }
+
+  async updateConversationName(conversationId: string, name: string): Promise<Conversation> {
+    const [conversation] = await db
+      .update(conversations)
+      .set({ name, updatedAt: new Date() })
+      .where(eq(conversations.id, conversationId))
+      .returning();
+    
+    return conversation;
   }
 
   // Message operations

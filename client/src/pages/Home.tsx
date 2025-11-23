@@ -283,6 +283,22 @@ export default function Home() {
                   : conv
               ) || []
           );
+        } else if (message.type === "conversation_updated") {
+          // Update conversation name in cache
+          const { conversationId, name } = message.data;
+
+          queryClient.setQueryData<ConversationWithDetails[]>(
+            ["/api/conversations"],
+            (oldConversations) =>
+              oldConversations?.map((conv) =>
+                conv.id === conversationId ? { ...conv, name } : conv
+              ) || []
+          );
+
+          // Also invalidate single conversation query
+          queryClient.invalidateQueries({
+            queryKey: ["/api/conversations", conversationId],
+          });
         } else if (message.type === "call_initiate") {
           // Incoming call
           const { conversationId, callType: incomingCallType } = message.data;
