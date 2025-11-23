@@ -503,17 +503,23 @@ export default function Home() {
   }, [selectedConversationId]);
 
   // Send typing indicator
-  const handleTyping = () => {
+  const handleTyping = async () => {
     if (!selectedConversationId || !user) return;
 
-    sendWsMessage({
-      type: "typing",
-      data: {
-        conversationId: selectedConversationId,
-        userId: user.id,
-        userName: getUserDisplayName(user),
-      },
-    });
+    try {
+      await fetch("/api/events/typing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          conversationId: selectedConversationId,
+          isTyping: true,
+        }),
+      });
+    } catch (error) {
+      // Silently fail - typing indicator is not critical
+      console.debug("Failed to send typing indicator:", error);
+    }
   };
 
   // Handle file upload
