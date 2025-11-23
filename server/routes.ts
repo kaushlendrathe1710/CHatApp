@@ -1102,7 +1102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if there are active SSE clients (excluding sender) in the conversation, mark as delivered
       const clientsInConversation = Array.from(sseClients.values()).filter(client => 
-        client.conversationIds.includes(conversationId) && client.userId !== userId
+        client && client.conversationIds && client.conversationIds.includes(conversationId) && client.userId !== userId
       );
       
       if (clientsInConversation.length > 0) {
