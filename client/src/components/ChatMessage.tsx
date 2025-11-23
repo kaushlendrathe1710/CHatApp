@@ -141,6 +141,24 @@ function ChatMessageComponent({
     );
   };
 
+  const getReplyPreviewText = (content: string | null | undefined, type: string): string => {
+    // For media types, return type labels
+    if (type === 'image') return 'Photo';
+    if (type === 'video') return 'Video';
+    if (type === 'audio') return 'Audio';
+    if (type === 'file') return 'File';
+    if (!content) return 'Message';
+    
+    // For text messages, truncate to first 5 words
+    const words = content.trim().split(/\s+/);
+    if (words.length <= 5) {
+      return content;
+    }
+    
+    // Take first 5 words and add ellipsis
+    return words.slice(0, 5).join(' ') + '...';
+  };
+
   const renderReplyPreview = () => {
     if (!message.replyTo) return null;
     
@@ -151,11 +169,7 @@ function ChatMessageComponent({
     }
     
     const repliedToName = getUserDisplayName(message.replyTo.sender);
-    const repliedContent = message.replyTo.content || 
-      (message.replyTo.type === 'image' ? 'Photo' :
-       message.replyTo.type === 'video' ? 'Video' :
-       message.replyTo.type === 'audio' ? 'Audio' :
-       message.replyTo.type === 'file' ? 'File' : 'Message');
+    const repliedContent = getReplyPreviewText(message.replyTo.content, message.replyTo.type || 'text');
     
     return (
       <div className={`mb-2 pl-3 border-l-4 py-1 overflow-hidden ${
