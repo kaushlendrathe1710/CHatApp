@@ -68,7 +68,10 @@ const verifyOTPSchema = z.object({
 // Register user schema
 const registerUserSchema = z.object({
   fullName: z.string().min(2, "Full name must be at least 2 characters"),
-  username: z.string().min(3, "Username must be at least 3 characters").max(30),
+  username: z.string()
+    .min(3, "Username must be at least 3 characters")
+    .max(20, "Username must be at most 20 characters")
+    .regex(/^[a-zA-Z0-9]+$/, "Username must be alphanumeric (no spaces or special characters)"),
   mobileNumber: z.string().min(10, "Valid mobile number is required"),
 });
 

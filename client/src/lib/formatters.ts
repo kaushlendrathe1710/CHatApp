@@ -69,12 +69,10 @@ export function formatLastSeen(date: Date | string): string {
   return formatMessageTime(d);
 }
 
-export function getUserDisplayName(user: { firstName?: string | null; lastName?: string | null; email?: string | null }): string {
-  if (user.firstName && user.lastName) {
-    return `${user.firstName} ${user.lastName}`;
-  }
-  if (user.firstName) {
-    return user.firstName;
+export function getUserDisplayName(user: { username?: string | null; fullName?: string | null; email?: string | null }): string {
+  // Prefer username, fallback to email
+  if (user.username) {
+    return user.username;
   }
   if (user.email) {
     return user.email.split('@')[0];

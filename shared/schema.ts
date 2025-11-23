@@ -56,9 +56,21 @@ export const insertUserSchema = createInsertSchema(users).omit({
   isSystemAdmin: true,
 });
 
+// Username validation schema
+export const usernameSchema = z.string()
+  .min(3, "Username must be at least 3 characters")
+  .max(20, "Username must be at most 20 characters")
+  .regex(/^[a-zA-Z0-9]+$/, "Username must be alphanumeric (no spaces or special characters)");
+
+// Schema for setting/updating username
+export const updateUsernameSchema = z.object({
+  username: usernameSchema,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+export type UpdateUsernameInput = z.infer<typeof updateUsernameSchema>;
 
 // OTP table for email verification
 export const otps = pgTable("otps", {

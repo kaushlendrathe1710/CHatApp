@@ -17,33 +17,36 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { UserPlus, Check, X, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { User, Check, X, Loader2, ArrowLeft } from "lucide-react";
+import { Link } from "wouter";
 
-const registrationSchema = z.object({
-  fullName: z.string().min(2, "Full name must be at least 2 characters"),
+const profileSchema = z.object({
   username: z.string()
     .min(3, "Username must be at least 3 characters")
     .max(20, "Username must be at most 20 characters")
     .regex(/^[a-zA-Z0-9]+$/, "Username must be alphanumeric (no spaces or special characters)"),
+  fullName: z.string().min(2, "Full name must be at least 2 characters"),
   mobileNumber: z.string().min(10, "Valid mobile number is required"),
 });
 
-type RegistrationForm = z.infer<typeof registrationSchema>;
+type ProfileForm = z.infer<typeof profileSchema>;
 
-export default function Registration() {
+export default function Profile() {
   const [, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
   const [usernameMessage, setUsernameMessage] = useState<string>("");
   const { toast } = useToast();
+  const { user } = useAuth();
 
-  const form = useForm<RegistrationForm>({
-    resolver: zodResolver(registrationSchema),
+  const form = useForm<ProfileForm>({
+    resolver: zodResolver(profileSchema),
     defaultValues: {
-      fullName: "",
-      username: "",
-      mobileNumber: "",
+      username: user?.username || "",
+      fullName: user?.fullName || "",
+      mobileNumber: user?.mobileNumber || "",
     },
   });
 
@@ -52,6 +55,13 @@ export default function Registration() {
   // Check username availability when user types
   useEffect(() => {
     const checkUsernameAvailability = async () => {
+      // Skip check if username hasn't changed
+      if (username === user?.username) {
+        setUsernameAvailable(null);
+        setUsernameMessage("");
+        return;
+      }
+
       if (!username || username.length < 3) {
         setUsernameAvailable(null);
         setUsernameMessage("");
@@ -83,24 +93,24 @@ export default function Registration() {
 
     const timer = setTimeout(checkUsernameAvailability, 500);
     return () => clearTimeout(timer);
-  }, [username]);
+  }, [username, user?.username]);
 
-  const onSubmit = async (data: RegistrationForm) => {
+  const onSubmit = async (data: ProfileForm) => {
     setIsLoading(true);
     try {
-      const response = await apiRequest("POST", "/api/auth/register", data);
+      const response = await apiRequest("PUT", "/api/users/profile", data);
 
       if (response.ok) {
         queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         toast({
-          title: "Registration complete",
-          description: "Welcome to the messaging platform!",
+          title: "Profile updated",
+          description: "Your profile has been updated successfully!",
         });
-        setLocation("/");
+        setLocation("/dashboard");
       } else {
         const error = await response.json();
         toast({
-          title: "Registration failed",
+          title: "Update failed",
           description: error.message || "Please try again",
           variant: "destructive",
         });
@@ -119,38 +129,24 @@ export default function Registration() {
   return (
     <div className="flex items-center justify-center min-h-screen p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 rounded-full bg-primary">
-              <UserPlus className="h-8 w-8 text-primary-foreground" />
+        <CardHeader>
+          <div className="flex items-center gap-2 mb-2">
+            <Link href="/dashboard">
+              <Button variant="ghost" size="icon" data-testid="button-back">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div className="flex-1">
+              <CardTitle className="text-2xl">Profile Settings</CardTitle>
+              <CardDescription>
+                Manage your username and profile information
+              </CardDescription>
             </div>
           </div>
-          <CardTitle className="text-2xl">Complete Your Profile</CardTitle>
-          <CardDescription>
-            Set up your account to start messaging
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="fullName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Full Name</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="John Doe"
-                        {...field}
-                        disabled={isLoading}
-                        data-testid="input-fullname"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <FormField
                 control={form.control}
                 name="username"
@@ -170,7 +166,7 @@ export default function Registration() {
                             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" data-testid="icon-checking-username" />
                           </div>
                         )}
-                        {!checkingUsername && usernameAvailable === true && username && (
+                        {!checkingUsername && usernameAvailable === true && username && username !== user?.username && (
                           <div className="absolute right-3 top-1/2 -translate-y-1/2">
                             <Check className="h-4 w-4 text-status-online" data-testid="icon-username-available" />
                           </div>
@@ -187,10 +183,33 @@ export default function Registration() {
                         {usernameMessage}
                       </FormDescription>
                     )}
+                    <FormDescription>
+                      Alphanumeric only, 3-20 characters
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="fullName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Full Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="John Doe"
+                        {...field}
+                        disabled={isLoading}
+                        data-testid="input-fullname"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="mobileNumber"
@@ -209,14 +228,27 @@ export default function Registration() {
                   </FormItem>
                 )}
               />
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isLoading}
-                data-testid="button-register"
-              >
-                {isLoading ? "Creating Account..." : "Complete Registration"}
-              </Button>
+
+              <div className="pt-4 flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setLocation("/dashboard")}
+                  disabled={isLoading}
+                  data-testid="button-cancel"
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isLoading || (usernameAvailable === false && username !== user?.username)}
+                  data-testid="button-save"
+                  className="flex-1"
+                >
+                  {isLoading ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
             </form>
           </Form>
         </CardContent>

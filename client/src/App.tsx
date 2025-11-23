@@ -13,11 +13,13 @@ import Home from "@/pages/Home";
 import PrivacySettings from "@/pages/PrivacySettings";
 import PhotoGallery from "@/pages/PhotoGallery";
 import People from "@/pages/People";
+import Profile from "@/pages/Profile";
 
 function Router() {
   const { user, isLoading } = useAuth();
   const isAuthenticated = !!user;
   const needsRegistration = isAuthenticated && !user?.isRegistered;
+  const needsUsername = isAuthenticated && user?.isRegistered && !user?.username;
 
   if (isLoading) {
     return (
@@ -41,17 +43,20 @@ function Router() {
       <Route path="/register">
         {!isAuthenticated ? <Redirect to="/login" /> : needsRegistration ? <Registration /> : <Redirect to="/dashboard" />}
       </Route>
+      <Route path="/profile">
+        {!isAuthenticated ? <Redirect to="/login" /> : <Profile />}
+      </Route>
       <Route path="/dashboard">
-        {!isAuthenticated ? <Redirect to="/" /> : needsRegistration ? <Redirect to="/register" /> : <Home />}
+        {!isAuthenticated ? <Redirect to="/" /> : needsRegistration ? <Redirect to="/register" /> : needsUsername ? <Redirect to="/profile" /> : <Home />}
       </Route>
       <Route path="/settings/privacy">
-        {!isAuthenticated ? <Redirect to="/" /> : <PrivacySettings />}
+        {!isAuthenticated ? <Redirect to="/" /> : needsUsername ? <Redirect to="/profile" /> : <PrivacySettings />}
       </Route>
       <Route path="/photos">
-        {!isAuthenticated ? <Redirect to="/" /> : <PhotoGallery />}
+        {!isAuthenticated ? <Redirect to="/" /> : needsUsername ? <Redirect to="/profile" /> : <PhotoGallery />}
       </Route>
       <Route path="/people">
-        {!isAuthenticated ? <Redirect to="/" /> : <People />}
+        {!isAuthenticated ? <Redirect to="/" /> : needsUsername ? <Redirect to="/profile" /> : <People />}
       </Route>
       <Route component={NotFound} />
     </Switch>

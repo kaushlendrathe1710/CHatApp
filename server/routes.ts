@@ -333,6 +333,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Check username availability (no auth required for registration flow)
+  app.get('/api/users/check-username/:username', async (req: any, res) => {
+    try {
+      const { username } = req.params;
+      
+      // Get current user ID from session if authenticated (undefined if not authenticated)
+      const currentUserId = req.session?.userId;
+
+      // Validate username format
+      const usernameSchema = z.string()
+        .min(3, "Username must be at least 3 characters")
+        .max(20, "Username must be at most 20 characters")
+        .regex(/^[a-zA-Z0-9]+$/, "Username must be alphanumeric (no spaces or special characters)");
+
+      const validationResult = usernameSchema.safeParse(username);
+      if (!validationResult.success) {
+        return res.json({ 
+          available: false, 
+          message: validationResult.error.errors[0].message 
+        });
+      }
+
+      const existingUser = await storage.getUserByUsername(username);
+      
+      // Username is available if:
+      // 1. No user has it, OR
+      // 2. The current authenticated user already has it (allowing them to keep their own username)
+      const available = !existingUser || (currentUserId && existingUser.id === currentUserId);
+      
+      res.json({ 
+        available,
+        message: available ? "Username is available" : "Username is already taken"
+      });
+    } catch (error) {
+      console.error("Error checking username:", error);
+      res.status(500).json({ message: "Failed to check username availability" });
+    }
+  });
+
+  // Update username
+  app.put('/api/users/username', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { username } = req.body;
+
+      // Validate username format
+      const usernameSchema = z.string()
+        .min(3, "Username must be at least 3 characters")
+        .max(20, "Username must be at most 20 characters")
+        .regex(/^[a-zA-Z0-9]+$/, "Username must be alphanumeric (no spaces or special characters)");
+
+      const validationResult = usernameSchema.safeParse(username);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: validationResult.error.errors[0].message 
+        });
+      }
+
+      // Check if username is already taken by another user
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(400).json({ message: "Username is already taken" });
+      }
+
+      // Update the username
+      const updatedUser = await storage.updateUser(userId, { username });
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating username:", error);
+      res.status(500).json({ message: "Failed to update username" });
+    }
+  });
+
+  // Update full profile
+  app.put('/api/users/profile', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { username, fullName, mobileNumber } = req.body;
+
+      // Validate profile data
+      const profileSchema = z.object({
+        username: z.string()
+          .min(3, "Username must be at least 3 characters")
+          .max(20, "Username must be at most 20 characters")
+          .regex(/^[a-zA-Z0-9]+$/, "Username must be alphanumeric (no spaces or special characters)"),
+        fullName: z.string().min(2, "Full name must be at least 2 characters"),
+        mobileNumber: z.string().min(10, "Valid mobile number is required"),
+      });
+
+      const validationResult = profileSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: validationResult.error.errors[0].message 
+        });
+      }
+
+      // Check if username is already taken by another user
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(400).json({ message: "Username is already taken" });
+      }
+
+      // Update the profile
+      const updatedUser = await storage.updateUser(userId, {
+        username,
+        fullName,
+        mobileNumber,
+      });
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
   // Get photo upload URL with objectKey
   app.post('/api/photos/upload-url', isAuthenticated, async (req: any, res) => {
     try {
