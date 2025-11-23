@@ -1130,7 +1130,7 @@ export default function Home() {
         {/* Main Chat Area */}
         <div
           className={`
-        flex-1 flex flex-col
+        flex-1 flex flex-col min-w-0 overflow-hidden
         ${selectedConversationId ? "flex" : "hidden md:flex"}
       `}
         >
