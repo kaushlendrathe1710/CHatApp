@@ -1430,7 +1430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!canAccess) {
         return res.sendStatus(401);
       }
-      s3Service.downloadObject(objectFile, res);
+      s3Service.downloadObject(objectFile, req, res);
     } catch (error) {
       console.error("Error checking object access:", error);
       if (error instanceof ObjectNotFoundError) {

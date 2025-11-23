@@ -213,16 +213,19 @@ export class S3StorageService {
 
   async downloadObject(
     objectFile: { key: string },
+    req: any,
     res: Response,
     cacheTtlSec: number = 3600
   ) {
     try {
-      const command = new GetObjectCommand({
+      // First, get the file metadata to know the total size
+      const headCommand = new HeadObjectCommand({
         Bucket: BUCKET_NAME,
         Key: objectFile.key,
       });
-
-      const response = await s3Client.send(command);
+      const headResponse = await s3Client.send(headCommand);
+      const fileSize = headResponse.ContentLength || 0;
+      const contentType = headResponse.ContentType || "application/octet-stream";
 
       // Get ACL policy to determine cache settings
       let isPublic = false;
@@ -243,17 +246,63 @@ export class S3StorageService {
         isPublic = false;
       }
 
-      res.set({
-        "Content-Type": response.ContentType || "application/octet-stream",
-        "Content-Length": response.ContentLength?.toString() || "0",
-        "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
-      });
+      // Check for Range header (for video seeking)
+      const range = req.headers.range;
+      
+      if (range) {
+        // Parse range header (e.g., "bytes=0-1023")
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = (end - start) + 1;
 
-      if (response.Body) {
-        const stream = response.Body as any;
-        stream.pipe(res);
+        // Fetch the requested range from S3
+        const command = new GetObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: objectFile.key,
+          Range: `bytes=${start}-${end}`,
+        });
+
+        const response = await s3Client.send(command);
+
+        // Send 206 Partial Content response
+        res.status(206);
+        res.set({
+          "Content-Type": contentType,
+          "Content-Length": chunkSize.toString(),
+          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+          "Accept-Ranges": "bytes",
+          "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
+        });
+
+        if (response.Body) {
+          const stream = response.Body as any;
+          stream.pipe(res);
+        } else {
+          res.status(404).json({ error: "File not found" });
+        }
       } else {
-        res.status(404).json({ error: "File not found" });
+        // No range requested, send the entire file
+        const command = new GetObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: objectFile.key,
+        });
+
+        const response = await s3Client.send(command);
+
+        res.set({
+          "Content-Type": contentType,
+          "Content-Length": fileSize.toString(),
+          "Accept-Ranges": "bytes",
+          "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
+        });
+
+        if (response.Body) {
+          const stream = response.Body as any;
+          stream.pipe(res);
+        } else {
+          res.status(404).json({ error: "File not found" });
+        }
       }
     } catch (error) {
       console.error("Error downloading file:", error);
