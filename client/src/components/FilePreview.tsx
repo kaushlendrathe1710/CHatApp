@@ -52,11 +52,11 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
   if (type === 'image') {
     return (
       <>
-        <div className="relative group max-w-xs" data-testid="preview-image">
+        <div className="relative group w-full max-w-full" data-testid="preview-image">
           <img
             src={fileUrl}
             alt={fileName}
-            className="rounded-lg max-w-full h-auto cursor-pointer hover-elevate"
+            className="rounded-lg w-full max-w-full h-auto cursor-pointer hover-elevate"
             onClick={() => setShowFullImage(true)}
             data-testid="img-message-attachment"
           />
@@ -100,11 +100,11 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
   // Video preview
   if (type === 'video') {
     return (
-      <div className="max-w-sm" data-testid="preview-video">
+      <div className="w-full max-w-full" data-testid="preview-video">
         <video
           src={fileUrl}
           controls
-          className="rounded-lg w-full"
+          className="rounded-lg w-full max-w-full h-auto"
           data-testid="video-message-attachment"
         >
           Your browser does not support the video tag.
@@ -121,7 +121,7 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
   // Audio preview - Voice Message Player
   if (type === 'audio') {
     return (
-      <div className="max-w-md" data-testid="preview-audio">
+      <div className="w-full max-w-full" data-testid="preview-audio">
         <AudioPlayer audioUrl={fileUrl} />
       </div>
     );
@@ -130,7 +130,7 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
   // Document/file preview (generic)
   return (
     <div
-      className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-xs hover-elevate cursor-pointer"
+      className="flex items-center gap-3 p-3 bg-muted rounded-lg w-full max-w-full hover-elevate cursor-pointer"
       onClick={handleDownload}
       data-testid="preview-document"
     >
