@@ -1269,9 +1269,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
 
-  // Create WebSocket server with built-in path filtering for /ws
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-  console.log('[WebSocket] Server attached to /ws path');
+  // Create WebSocket server WITHOUT attaching to http server yet
+  const wss = new WebSocketServer({ noServer: true });
+  console.log('[WebSocket] Server created (noServer mode)');
+
+  // Manually handle upgrade requests and route to correct WebSocket server
+  httpServer.on('upgrade', (request, socket, head) => {
+    const pathname = request.url || '';
+    console.log('[DIAGNOSTIC] Upgrade request for:', pathname);
+    
+    if (pathname.startsWith('/ws')) {
+      console.log('[WebSocket] Handling /ws upgrade request');
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        console.log('[WebSocket] handleUpgrade complete, emitting connection');
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      // Not for our WebSocket server - let it bubble up to Vite HMR
+      console.log('[DIAGNOSTIC] Non-/ws upgrade request, passing through');
+    }
+  });
 
   wss.on('connection', (ws: WebSocket, req: any) => {
     console.log('[WebSocket] Client connected from:', req.socket.remoteAddress);
