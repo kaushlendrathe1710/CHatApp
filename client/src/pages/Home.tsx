@@ -937,12 +937,12 @@ export default function Home() {
   return (
     <>
       <div 
-        className="flex overflow-hidden bg-background" 
+        className="flex bg-background" 
         style={{ 
-          minHeight: '100dvh',
+          height: '100dvh',
           boxSizing: 'border-box',
-          paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--viewport-safe-top, 0px))',
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + var(--viewport-safe-bottom, 0px))',
+          paddingTop: 'max(16px, calc(env(safe-area-inset-top, 0px) + var(--viewport-safe-top, 0px)))',
+          paddingBottom: 'max(8px, calc(env(safe-area-inset-bottom, 0px) + var(--viewport-safe-bottom, 0px)))',
         }}
       >
         {/* Sidebar - Chat List */}
