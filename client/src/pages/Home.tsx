@@ -1238,8 +1238,18 @@ export default function Home() {
                                 ? getUserDisplayName(otherParticipant.user)
                                 : "Unknown"}
                             </h2>
-                            {selectedConversation.isGroup ||
-                            selectedConversation.isBroadcast ? (
+                            {selectedConversation.isGroup ? (
+                              <button
+                                className="text-xs text-muted-foreground hover:underline text-left"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setGroupSettingsDialogOpen(true);
+                                }}
+                                data-testid="button-view-members"
+                              >
+                                {selectedConversation.participants.length} members
+                              </button>
+                            ) : selectedConversation.isBroadcast ? (
                               <p className="text-xs text-muted-foreground">
                                 {selectedConversation.participants.length} members
                               </p>
