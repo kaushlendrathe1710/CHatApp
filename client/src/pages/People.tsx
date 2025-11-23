@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Search, MessageCircle, Users as UsersIcon, Shield, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Search, MessageCircle, Users as UsersIcon, Shield, ShieldCheck, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getUserDisplayName, formatLastSeen } from "@/lib/formatters";
@@ -17,11 +17,39 @@ export default function People() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  // Fetch all users
-  const { data: users = [], isLoading, isError, error } = useQuery<User[]>({
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Fetch all users (shown when no search query)
+  const { data: allUsers = [], isLoading: isLoadingAll } = useQuery<User[]>({
     queryKey: ['/api/users'],
+    enabled: !debouncedSearch,
   });
+
+  // Search users by username
+  const { data: searchResults = [], isLoading: isSearching } = useQuery<User[]>({
+    queryKey: ['/api/users/search', debouncedSearch],
+    queryFn: async () => {
+      if (!debouncedSearch) return [];
+      const response = await fetch(`/api/users/search?q=${encodeURIComponent(debouncedSearch)}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Search failed');
+      return response.json();
+    },
+    enabled: !!debouncedSearch,
+  });
+
+  // Use search results if searching, otherwise show all users
+  const displayedUsers = debouncedSearch ? searchResults : allUsers;
+  const isLoading = debouncedSearch ? isSearching : isLoadingAll;
 
   // Get current user
   const { data: currentUser } = useQuery<User>({
@@ -57,84 +85,10 @@ export default function People() {
     },
   });
 
-  // Filter users based on search query
-  const filteredUsers = users.filter(user => {
-    const displayName = getUserDisplayName(user);
-    const email = user.email || "";
-    const username = user.username || "";
-    const query = searchQuery.toLowerCase();
-    
-    return (
-      displayName.toLowerCase().includes(query) ||
-      email.toLowerCase().includes(query) ||
-      username.toLowerCase().includes(query)
-    );
-  });
-
   const handleStartChat = (userId: string) => {
     createConversationMutation.mutate(userId);
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-6xl mx-auto p-4 space-y-6">
-          <div className="flex flex-wrap items-center gap-4">
-            <Skeleton className="h-10 w-10" />
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-40" />
-              <Skeleton className="h-4 w-60" />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-32" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-6xl mx-auto p-4 space-y-6">
-          <div className="flex flex-wrap items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setLocation("/dashboard")}
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <UsersIcon className="h-6 w-6" />
-                All People
-              </h1>
-            </div>
-          </div>
-          <Card className="p-12">
-            <div className="text-center space-y-2">
-              <UsersIcon className="h-12 w-12 mx-auto text-destructive" />
-              <h3 className="text-lg font-semibold">Failed to load people</h3>
-              <p className="text-sm text-muted-foreground">
-                {error instanceof Error ? error.message : "An error occurred while loading users"}
-              </p>
-              <Button
-                onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/users'] })}
-                data-testid="button-retry"
-              >
-                Try Again
-              </Button>
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -152,10 +106,13 @@ export default function People() {
           <div className="flex-1">
             <h1 className="text-2xl font-bold flex flex-wrap items-center gap-2">
               <UsersIcon className="h-6 w-6" />
-              All People
+              {searchQuery ? "Search Results" : "All People"}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Connect with {filteredUsers.length} {filteredUsers.length === 1 ? 'person' : 'people'}
+              {searchQuery 
+                ? `Found ${displayedUsers.length} ${displayedUsers.length === 1 ? 'person' : 'people'}`
+                : `Connect with ${displayedUsers.length} ${displayedUsers.length === 1 ? 'person' : 'people'}`
+              }
             </p>
           </div>
         </div>
@@ -164,16 +121,25 @@ export default function People() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name, username, or email..."
+            placeholder="Search by username (e.g., @john123)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
             data-testid="input-search-users"
           />
+          {isLoading && searchQuery && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
         </div>
 
         {/* User Grid */}
-        {filteredUsers.length === 0 ? (
+        {isLoading && !searchQuery ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <Skeleton key={i} className="h-48" />
+            ))}
+          </div>
+        ) : displayedUsers.length === 0 ? (
           <Card className="p-12">
             <div className="text-center space-y-2">
               <UsersIcon className="h-12 w-12 mx-auto text-muted-foreground" />
@@ -185,7 +151,7 @@ export default function People() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredUsers.map((user) => (
+            {displayedUsers.map((user) => (
               <Card
                 key={user.id}
                 className="hover-elevate overflow-visible"

@@ -238,24 +238,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
-  // Get all users (sanitized based on privacy settings and role-based filtering)
+  // Get all users (sanitized based on privacy settings)
   app.get('/api/users', isAuthenticated, async (req: any, res) => {
     try {
       const currentUserId = req.user.id;
-      const currentUserRole = req.user.role || 'user';
       
       const allUsers = await storage.getAllUsers();
       
-      // Role-based filtering: Regular users can only see admins and super admins
-      let filteredUsers = allUsers
+      // Filter users based on privacy settings
+      const filteredUsers = allUsers
         .filter(u => u.id !== currentUserId) // Exclude current user
         .filter(u => u.profileVisibility !== 'hidden'); // Exclude hidden users
-      
-      // If current user is a regular user, only show admins and super admins
-      if (currentUserRole === 'user') {
-        filteredUsers = filteredUsers.filter(u => u.role === 'admin' || u.role === 'super_admin');
-      }
-      // Admins and super admins can see everyone
       
       // Sanitize each user's data based on their privacy settings
       const sanitizedUsers = await Promise.all(
@@ -266,6 +259,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Search users by username
+  app.get('/api/users/search', isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUserId = req.user.id;
+      const searchQuery = (req.query.q as string || '').toLowerCase().trim();
+      
+      if (!searchQuery || searchQuery.length < 1) {
+        return res.json([]);
+      }
+      
+      const allUsers = await storage.getAllUsers();
+      
+      // Search for users whose username contains the search query
+      const matchedUsers = allUsers
+        .filter(u => u.id !== currentUserId) // Exclude current user
+        .filter(u => u.profileVisibility !== 'hidden') // Respect privacy settings
+        .filter(u => u.username && u.username.toLowerCase().includes(searchQuery))
+        .slice(0, 20); // Limit to 20 results
+      
+      // Sanitize user data
+      const sanitizedUsers = await Promise.all(
+        matchedUsers.map(user => storage.sanitizeUserData(user, currentUserId))
+      );
+      
+      res.json(sanitizedUsers);
+    } catch (error) {
+      console.error("Error searching users:", error);
+      res.status(500).json({ message: "Failed to search users" });
     }
   });
 
