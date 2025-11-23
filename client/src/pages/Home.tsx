@@ -1235,7 +1235,7 @@ export default function Home() {
                     const isDirectMessage = !selectedConversation.isGroup && !selectedConversation.isBroadcast;
 
                     const handleOpenUserDetails = () => {
-                      if (isDirectMessage && otherParticipant) {
+                      if (isDirectMessage && otherParticipant?.user) {
                         setSelectedUserForDetails(otherParticipant.user);
                         setUserDetailsDialogOpen(true);
                       }
@@ -1291,7 +1291,7 @@ export default function Home() {
                                 selectedConversation.isBroadcast) &&
                               selectedConversation.name
                                 ? selectedConversation.name
-                                : otherParticipant
+                                : otherParticipant?.user
                                 ? getUserDisplayName(otherParticipant.user)
                                 : "Unknown"}
                             </h2>
@@ -1317,7 +1317,7 @@ export default function Home() {
                               >
                                 {isOnline
                                   ? "online"
-                                  : otherParticipant?.user.lastSeen
+                                  : otherParticipant?.user?.lastSeen
                                   ? `last seen ${formatLastSeen(otherParticipant.user.lastSeen)}`
                                   : "offline"}
                               </p>
