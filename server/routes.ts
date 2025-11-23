@@ -1094,32 +1094,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
-      // Broadcast new message via Socket.IO
+      // Broadcast new message via SSE
       broadcastToConversation(conversationId, {
         type: 'message',
         data: { ...message, conversationId },
       });
 
-      // If there are active Socket.IO clients (excluding sender) in the conversation, mark as delivered
-      if (io) {
-        const socketsInRoom = await io.in(conversationId).fetchSockets();
-        const hasRecipientOnline = socketsInRoom.some(socket => {
-          const socketUserId = socketUserMap.get(socket.id);
-          return socketUserId && socketUserId !== userId;
+      // Check if there are active SSE clients (excluding sender) in the conversation, mark as delivered
+      const clientsInConversation = Array.from(sseClients.values()).filter(client => 
+        client.conversationIds.includes(conversationId) && client.userId !== userId
+      );
+      
+      if (clientsInConversation.length > 0) {
+        await storage.updateMessageStatus(message.id, 'delivered');
+        broadcastToConversation(conversationId, {
+          type: 'status_update',
+          data: {
+            conversationId,
+            messageId: message.id,
+            status: 'delivered',
+            userId,
+          },
         });
-        
-        if (hasRecipientOnline) {
-          await storage.updateMessageStatus(message.id, 'delivered');
-          broadcastToConversation(conversationId, {
-            type: 'status_update',
-            data: {
-              conversationId,
-              messageId: message.id,
-              status: 'delivered',
-              userId,
-            },
-          });
-        }
       }
 
       res.json(message);
