@@ -16,23 +16,31 @@ export interface NotificationOptions {
  */
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!('Notification' in window)) {
-    console.warn('Browser does not support notifications');
+    console.warn('[Notifications] Browser does not support notifications');
     return false;
   }
 
   if (Notification.permission === 'granted') {
+    console.log('[Notifications] Permission already granted');
     return true;
   }
 
   if (Notification.permission === 'denied') {
+    console.warn('[Notifications] Permission denied by user');
     return false;
   }
 
   try {
+    console.log('[Notifications] Requesting permission...');
     const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      console.log('[Notifications] Permission granted!');
+    } else {
+      console.warn('[Notifications] Permission not granted:', permission);
+    }
     return permission === 'granted';
   } catch (error) {
-    console.error('Failed to request notification permission:', error);
+    console.error('[Notifications] Failed to request permission:', error);
     return false;
   }
 }
@@ -49,18 +57,16 @@ export function canShowNotifications(): boolean {
 
 /**
  * Show a browser notification
+ * Now shows notifications ALWAYS, even when app is open (mobile/laptop)
  */
 export function showBrowserNotification(options: NotificationOptions): Notification | null {
   if (!canShowNotifications()) {
-    return null;
-  }
-
-  // Don't show notification if window is focused
-  if (!document.hidden) {
+    console.log('[Notifications] Cannot show - permission not granted');
     return null;
   }
 
   try {
+    console.log('[Notifications] Showing notification:', options.title);
     const notification = new Notification(options.title, {
       body: options.body,
       icon: options.icon || '/icon-192x192.png',
