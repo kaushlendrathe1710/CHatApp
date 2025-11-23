@@ -219,7 +219,7 @@ function ChatMessageComponent({
             showDownload={true}
           />
           {message.content && (
-            <p className="text-sm whitespace-pre-wrap break-words max-w-full overflow-wrap-anywhere">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap break-words max-w-full">{message.content}</p>
           )}
         </div>
       );
@@ -251,7 +251,7 @@ function ChatMessageComponent({
             <Shield className="h-3 w-3" />
             <span>Encrypted</span>
           </div>
-          <p className="text-sm whitespace-pre-wrap break-words max-w-full overflow-wrap-anywhere" data-testid={`text-message-${message.id}`}>
+          <p className="text-sm whitespace-pre-wrap break-words max-w-full" data-testid={`text-message-${message.id}`}>
             {decryptedContent}
           </p>
         </div>
@@ -260,7 +260,7 @@ function ChatMessageComponent({
 
     // Plain text message
     return (
-      <p className="text-sm whitespace-pre-wrap break-words max-w-full overflow-wrap-anywhere" data-testid={`text-message-${message.id}`}>
+      <p className="text-sm whitespace-pre-wrap break-words max-w-full" data-testid={`text-message-${message.id}`}>
         {message.content}
       </p>
     );
@@ -318,7 +318,7 @@ function ChatMessageComponent({
         {/* Wrap message bubble and action menu in group for hover */}
         <div className="group relative flex items-start gap-1 max-w-full">
           <div
-            className={`rounded-2xl px-3 py-2 min-w-0 max-w-full break-words overflow-wrap-anywhere ${
+            className={`rounded-2xl px-3 py-2 min-w-0 max-w-full break-words ${
               isOwn
                 ? 'bg-primary text-primary-foreground rounded-br-sm'
                 : 'bg-card border border-card-border rounded-bl-sm'
