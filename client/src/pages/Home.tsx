@@ -1254,7 +1254,7 @@ export default function Home() {
 
                           <div className="flex-1 min-w-0 text-left">
                             <h2
-                              className="font-semibold truncate"
+                              className="font-semibold break-words line-clamp-2 leading-tight"
                               data-testid="text-conversation-header-name"
                             >
                               {(selectedConversation.isGroup ||
