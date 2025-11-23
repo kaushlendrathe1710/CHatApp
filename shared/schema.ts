@@ -43,6 +43,10 @@ export const users = pgTable("users", {
   locationPrivacy: text("location_privacy").default("city").notNull(), // exact, city, country, hidden
   lastSeenVisibility: text("last_seen_visibility").default("everyone").notNull(), // everyone, connections, hidden
   onlineStatusVisibility: boolean("online_status_visibility").default(true).notNull(),
+  // Notification sound settings
+  notificationSoundEnabled: boolean("notification_sound_enabled").default(true).notNull(),
+  notificationSoundType: text("notification_sound_type").default("default").notNull(), // default, chime, bell, pop, swoosh
+  notificationVolume: integer("notification_volume").default(70).notNull(), // 0-100
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
