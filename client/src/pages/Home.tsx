@@ -1557,21 +1557,25 @@ export default function Home() {
         onOpenChange={setCreateGroupDialogOpen}
       />
 
-      {selectedConversation && selectedConversation.isGroup && (
-        <GroupSettingsDialog
-          open={groupSettingsDialogOpen}
-          onOpenChange={setGroupSettingsDialogOpen}
-          conversationId={selectedConversation.id}
-          isAdmin={
-            user?.role === 'admin' || 
-            user?.role === 'super_admin' ||
-            selectedConversation.participants.some(
-              p => p.userId === user?.id && p.role === 'admin'
-            )
-          }
-          currentUserId={user?.id || ""}
-        />
-      )}
+      {selectedConversation && selectedConversation.isGroup && (() => {
+        const isAdmin = user?.role === 'admin' || 
+          user?.role === 'super_admin' ||
+          selectedConversation.participants.some(
+            p => p.userId === user?.id && p.role === 'admin'
+          );
+        
+        console.log('GroupSettingsDialog - isAdmin:', isAdmin, 'user.role:', user?.role, 'user.id:', user?.id);
+        
+        return (
+          <GroupSettingsDialog
+            open={groupSettingsDialogOpen}
+            onOpenChange={setGroupSettingsDialogOpen}
+            conversationId={selectedConversation.id}
+            isAdmin={isAdmin}
+            currentUserId={user?.id || ""}
+          />
+        );
+      })()}
 
       <EncryptionSetupDialog
         open={encryptionDialogOpen}
