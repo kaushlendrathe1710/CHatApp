@@ -60,6 +60,10 @@ import {
   hasEncryptionKeys,
   getStoredPublicKeyBase64,
 } from "@/lib/encryption";
+import {
+  requestNotificationPermission,
+  showBrowserNotification,
+} from "@/lib/notifications";
 import type {
   ConversationWithDetails,
   MessageWithSender,
@@ -155,6 +159,55 @@ export default function Home() {
             queryClient.invalidateQueries({
               queryKey: ["/api/messages", selectedConversationId],
             });
+          }
+
+          // Show browser notification if message is from another user
+          if (message.data.senderId !== user?.id) {
+            const conversation = conversations.find(
+              (c) => c.id === message.data.conversationId
+            );
+            
+            if (conversation) {
+              const sender = conversation.participants.find(
+                (p) => p.userId === message.data.senderId
+              );
+              
+              const senderName = sender
+                ? getUserDisplayName(sender.user)
+                : "Someone";
+              
+              const conversationName = conversation.isGroup
+                ? conversation.name || "Group Chat"
+                : senderName;
+
+              let notificationBody = message.data.content || "";
+              
+              // Show file type if it's a media message
+              if (message.data.type === "image") {
+                notificationBody = "Photo";
+              } else if (message.data.type === "video") {
+                notificationBody = "Video";
+              } else if (message.data.type === "audio") {
+                notificationBody = "Voice message";
+              } else if (message.data.type === "document") {
+                notificationBody = message.data.fileName || "File";
+              }
+
+              // Prefix sender name in group chats
+              const finalBody = conversation.isGroup
+                ? `${senderName}: ${notificationBody}`
+                : notificationBody;
+
+              showBrowserNotification({
+                title: conversationName,
+                body: finalBody,
+                tag: message.data.conversationId,
+                conversationId: message.data.conversationId,
+                onClick: () => {
+                  setSelectedConversationId(message.data.conversationId);
+                },
+              });
+            }
           }
         } else if (message.type === "typing") {
           const { conversationId, userId, userName } = message.data;
@@ -292,6 +345,13 @@ export default function Home() {
   const selectedConversation = conversations.find(
     (c) => c.id === selectedConversationId
   );
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if (user) {
+      requestNotificationPermission().catch(console.error);
+    }
+  }, [user]);
 
   // Update encryption state when conversation changes or keys are loaded
   useEffect(() => {
