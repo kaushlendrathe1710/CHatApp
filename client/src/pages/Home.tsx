@@ -65,7 +65,6 @@ import {
   requestNotificationPermission,
   showBrowserNotification,
 } from "@/lib/notifications";
-import { notificationSoundManager } from "@/lib/notificationSounds";
 import type {
   ConversationWithDetails,
   MessageWithSender,
@@ -141,30 +140,6 @@ export default function Home() {
   const { toast } = useToast();
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
-  // Fetch and sync notification sound settings
-  const { data: notificationSoundSettings } = useQuery<{
-    userId: string;
-    notificationSoundEnabled: boolean;
-    notificationSoundType: string;
-    notificationVolume: number;
-  }>({
-    queryKey: ['/api/users/notification-sound', user?.id],
-    enabled: !!user,
-  });
-
-  // Hydrate notification sound settings when they load (with user ID validation)
-  // Note: Global reset on auth change is handled by AuthTransitionObserver in App.tsx
-  useEffect(() => {
-    // Only hydrate if we have settings, a user, and the settings belong to the current user
-    if (notificationSoundSettings && user && notificationSoundSettings.userId === user.id) {
-      notificationSoundManager.hydrate({
-        enabled: notificationSoundSettings.notificationSoundEnabled,
-        soundType: notificationSoundSettings.notificationSoundType as any,
-        volume: notificationSoundSettings.notificationVolume,
-      });
-    }
-  }, [notificationSoundSettings, user]);
-
   // Fetch conversations first (needed by WebSocket hook)
   const { data: conversations = [], isLoading: conversationsLoading } =
     useQuery<ConversationWithDetails[]>({
@@ -236,13 +211,6 @@ export default function Home() {
                   setSelectedConversationId(message.data.conversationId);
                 },
               });
-
-              // Play notification sound only for messages from other users
-              if (message.data.senderId !== user?.id) {
-                notificationSoundManager.play().catch((err) => {
-                  console.error('[NotificationSound] Failed to play:', err);
-                });
-              }
             }
           }
         } else if (message.type === "typing") {
@@ -937,7 +905,7 @@ export default function Home() {
         const participant = selectedConversation?.participants.find(
           (p) => p.userId === id
         );
-        return participant?.user ? getUserDisplayName(participant.user) : "Someone";
+        return participant ? getUserDisplayName(participant.user) : "Someone";
       });
   };
 
@@ -949,7 +917,7 @@ export default function Home() {
     const name =
       (conv.isGroup || conv.isBroadcast) && conv.name
         ? conv.name
-        : otherParticipants.length > 0 && otherParticipants[0].user
+        : otherParticipants.length > 0
         ? getUserDisplayName(otherParticipants[0].user)
         : "";
     return name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -1158,9 +1126,9 @@ export default function Home() {
               </div>
             ) : (
               <div data-testid="conversations-list">
-                {user && filteredConversations.map((conversation) => {
+                {filteredConversations.map((conversation) => {
                   const otherUserId = conversation.participants.find(
-                    (p) => p.userId !== user.id
+                    (p) => p.userId !== user!.id
                   )?.userId;
                   const isOnline = otherUserId
                     ? onlineUsers.has(otherUserId)
@@ -1170,7 +1138,7 @@ export default function Home() {
                     <ConversationListItem
                       key={conversation.id}
                       conversation={conversation}
-                      currentUserId={user.id}
+                      currentUserId={user!.id}
                       isActive={conversation.id === selectedConversationId}
                       isOnline={!conversation.isGroup ? isOnline : undefined}
                       onClick={() => {
@@ -1235,7 +1203,7 @@ export default function Home() {
                     const isDirectMessage = !selectedConversation.isGroup && !selectedConversation.isBroadcast;
 
                     const handleOpenUserDetails = () => {
-                      if (isDirectMessage && otherParticipant?.user) {
+                      if (isDirectMessage && otherParticipant) {
                         setSelectedUserForDetails(otherParticipant.user);
                         setUserDetailsDialogOpen(true);
                       }
@@ -1291,7 +1259,7 @@ export default function Home() {
                                 selectedConversation.isBroadcast) &&
                               selectedConversation.name
                                 ? selectedConversation.name
-                                : otherParticipant?.user
+                                : otherParticipant
                                 ? getUserDisplayName(otherParticipant.user)
                                 : "Unknown"}
                             </h2>
@@ -1317,7 +1285,7 @@ export default function Home() {
                               >
                                 {isOnline
                                   ? "online"
-                                  : otherParticipant?.user?.lastSeen
+                                  : otherParticipant?.user.lastSeen
                                   ? `last seen ${formatLastSeen(otherParticipant.user.lastSeen)}`
                                   : "offline"}
                               </p>

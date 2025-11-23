@@ -36,21 +36,18 @@ export async function isAuthenticated(req: Request, res: Response, next: NextFun
         req.user = {
           id: user.id,
           email: user.email,
-          username: user.username ?? undefined,
+          username: user.username,
           isRegistered: user.isRegistered,
-          role: user.role ?? undefined,
+          role: user.role,
         };
         next();
       } else {
-        // User not found - destroy invalid session
         req.session.destroy(() => {});
         res.status(401).json({ message: "User not found" });
       }
     } catch (error) {
       console.error("Auth middleware error:", error);
-      // Destroy potentially corrupted session
-      req.session.destroy(() => {});
-      res.status(401).json({ message: "Authentication failed" });
+      res.status(500).json({ message: "Authentication failed" });
     }
   } else {
     res.status(401).json({ message: "Not authenticated" });
