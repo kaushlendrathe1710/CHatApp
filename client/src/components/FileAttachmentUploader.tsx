@@ -49,17 +49,18 @@ export function FileAttachmentUploader({ onFileUpload, disabled }: FileAttachmen
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Check file size (50MB max)
-      if (file.size > 50 * 1024 * 1024) {
+      // Check file size (1GB max)
+      if (file.size > 1024 * 1024 * 1024) {
         toast({
           title: "File too large",
-          description: "Maximum file size is 50MB",
+          description: "Maximum file size is 1GB",
           variant: "destructive",
         });
         return;
