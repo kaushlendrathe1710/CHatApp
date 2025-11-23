@@ -1239,8 +1239,8 @@ export default function Home() {
                                 : "Unknown"}
                             </h2>
                             {selectedConversation.isGroup ? (
-                              <button
-                                className="text-xs text-muted-foreground hover:underline text-left"
+                              <span
+                                className="text-xs text-muted-foreground hover:underline text-left cursor-pointer"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setGroupSettingsDialogOpen(true);
@@ -1248,7 +1248,7 @@ export default function Home() {
                                 data-testid="button-view-members"
                               >
                                 {selectedConversation.participants.length} members
-                              </button>
+                              </span>
                             ) : selectedConversation.isBroadcast ? (
                               <p className="text-xs text-muted-foreground">
                                 {selectedConversation.participants.length} members
