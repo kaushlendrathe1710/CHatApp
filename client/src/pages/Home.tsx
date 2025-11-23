@@ -1158,9 +1158,9 @@ export default function Home() {
               </div>
             ) : (
               <div data-testid="conversations-list">
-                {filteredConversations.map((conversation) => {
+                {user && filteredConversations.map((conversation) => {
                   const otherUserId = conversation.participants.find(
-                    (p) => p.userId !== user!.id
+                    (p) => p.userId !== user.id
                   )?.userId;
                   const isOnline = otherUserId
                     ? onlineUsers.has(otherUserId)
@@ -1170,7 +1170,7 @@ export default function Home() {
                     <ConversationListItem
                       key={conversation.id}
                       conversation={conversation}
-                      currentUserId={user!.id}
+                      currentUserId={user.id}
                       isActive={conversation.id === selectedConversationId}
                       isOnline={!conversation.isGroup ? isOnline : undefined}
                       onClick={() => {
