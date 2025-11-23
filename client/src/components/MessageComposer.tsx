@@ -510,18 +510,19 @@ export const MessageComposer = React.memo(function MessageComposer({
         </div>
       )}
 
-      <div className="flex items-end gap-1 sm:gap-2">
+      <div className="flex items-end gap-1 sm:gap-2 w-full">
         <FileAttachmentUploader
           onFileUpload={handleFileUpload}
           disabled={disabled}
         />
 
+        {/* Hide camera on mobile - accessible via attachment menu */}
         <Button
           size="icon"
           variant="ghost"
           onClick={() => setCameraOpen(true)}
           disabled={disabled}
-          className="flex-shrink-0 min-w-[44px] min-h-[44px]"
+          className="hidden sm:flex flex-shrink-0 min-w-[44px] min-h-[44px]"
           data-testid="button-camera"
         >
           <Camera className="h-5 w-5" />
