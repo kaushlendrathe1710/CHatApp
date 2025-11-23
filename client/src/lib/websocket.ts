@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { apiRequest } from './queryClient';
 
 export type WebSocketMessage = {
-  type: 'message' | 'typing' | 'presence' | 'status_update' | 'join_conversations' | 'reaction_added' | 'message_edited' | 'message_deleted' | 'settings_updated';
+  type: 'message' | 'typing' | 'presence' | 'status_update' | 'join_conversations' | 'reaction_added' | 'message_edited' | 'message_deleted' | 'settings_updated' | 'conversation_updated' | 'call_initiate' | 'call_signal' | 'call_end' | 'encryption_key_added';
   data: any;
 };
 
@@ -142,21 +142,28 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     eventSource.addEventListener('call_signal', (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'message', data: { type: 'call_signal', ...data } });
+        onMessage({ type: 'call_signal', data });
       }
     });
 
     eventSource.addEventListener('call_initiate', (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'message', data: { type: 'call_initiate', ...data } });
+        onMessage({ type: 'call_initiate', data });
       }
     });
 
     eventSource.addEventListener('call_end', (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'message', data: { type: 'call_end', ...data } });
+        onMessage({ type: 'call_end', data });
+      }
+    });
+
+    eventSource.addEventListener('encryption_key_added', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'encryption_key_added', data });
       }
     });
 
