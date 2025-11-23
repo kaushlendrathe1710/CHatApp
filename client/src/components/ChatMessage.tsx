@@ -134,11 +134,10 @@ function ChatMessageComponent({
   const renderForwardedFromBadge = () => {
     if (!message.forwardedFromUser) return null;
     
-    const forwardedName = getUserDisplayName(message.forwardedFromUser);
     return (
       <div className="text-xs text-muted-foreground italic mb-1" data-testid={`text-forwarded-from-${message.id}`}>
         <Forward className="h-3 w-3 inline mr-1" />
-        Forwarded from {forwardedName}
+        Forwarded
       </div>
     );
   };
