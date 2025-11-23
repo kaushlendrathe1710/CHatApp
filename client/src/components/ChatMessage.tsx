@@ -144,6 +144,12 @@ function ChatMessageComponent({
   const renderReplyPreview = () => {
     if (!message.replyTo) return null;
     
+    // Safety check for sender
+    if (!message.replyTo.sender) {
+      console.warn('Reply message missing sender data:', message.replyTo);
+      return null;
+    }
+    
     const repliedToName = getUserDisplayName(message.replyTo.sender);
     const repliedContent = message.replyTo.content || 
       (message.replyTo.type === 'image' ? 'Photo' :
@@ -157,12 +163,12 @@ function ChatMessageComponent({
           ? 'border-primary-foreground/30 bg-primary-foreground/10' 
           : 'border-primary/30 bg-primary/10'
       }`} data-testid={`reply-preview-${message.id}`}>
-        <p className={`text-xs font-semibold truncate ${
+        <p className={`text-xs font-semibold truncate max-w-full ${
           isOwn ? 'text-primary-foreground' : 'text-primary'
         }`}>
           {repliedToName}
         </p>
-        <p className={`text-xs truncate ${
+        <p className={`text-xs truncate max-w-full ${
           isOwn ? 'text-primary-foreground/80' : 'text-foreground/80'
         }`}>
           {repliedContent}
