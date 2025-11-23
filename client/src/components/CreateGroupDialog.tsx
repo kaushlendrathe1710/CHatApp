@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { isUnauthorizedError } from "@/lib/authUtils";
 import { Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { User } from "@shared/schema";
@@ -75,6 +76,20 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error creating group:", error);
+      
+      // Handle 401 errors by redirecting to login
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Session expired",
+          description: "Please log in again to continue",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      
       toast({
         title: "Failed to create group",
         description: error.message || "Please try again",

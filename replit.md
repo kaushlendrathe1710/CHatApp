@@ -8,6 +8,14 @@ A real-time messaging platform inspired by WhatsApp and Telegram, built with Rea
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+**November 23, 2025** - Fixed group creation authentication error:
+- Fixed TypeScript error in auth middleware (null → undefined conversion for username/role fields)
+- Improved auth middleware error handling: returns 401 instead of 500, destroys invalid sessions
+- Added 401 error detection and redirect to login in CreateGroupDialog component
+- Users now get "Session expired" message and automatic login redirect instead of "Authentication failed"
+
 ## System Architecture
 
 ### Frontend Architecture
