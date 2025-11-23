@@ -30,7 +30,7 @@ import {
   type MessageWithSender,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ne, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, inArray, sql, desc } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -42,12 +42,11 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<User>): Promise<User>;
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
-  getUsersFiltered(currentUserId: string, currentUserRole: string): Promise<User[]>;
   updateUserLastSeen(userId: string): Promise<void>;
   
   // Conversation operations
   getConversation(id: string): Promise<Conversation | undefined>;
-  getUserConversations(userId: string, limit?: number, offset?: number): Promise<ConversationWithDetails[]>;
+  getUserConversations(userId: string): Promise<ConversationWithDetails[]>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   addConversationParticipants(participants: InsertConversationParticipant[]): Promise<void>;
   getOrCreateDirectConversation(userId1: string, userId2: string): Promise<Conversation>;
@@ -88,7 +87,6 @@ export interface IStorage {
   // Group chat operations
   createGroup(name: string, description: string | undefined, avatarUrl: string | undefined, createdBy: string, participantIds: string[]): Promise<Conversation>;
   getGroupParticipants(conversationId: string): Promise<(ConversationParticipant & { user: User })[]>;
-  getParticipant(conversationId: string, userId: string): Promise<ConversationParticipant | undefined>;
   addGroupParticipant(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void>;
   removeGroupParticipant(conversationId: string, userId: string): Promise<void>;
   updateParticipantRole(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void>;
@@ -98,8 +96,7 @@ export interface IStorage {
   updatePrivacySettings(userId: string, settings: Partial<Pick<User, 'profileVisibility' | 'locationPrivacy' | 'lastSeenVisibility' | 'onlineStatusVisibility'>>): Promise<User>;
   getDiscoverableUsers(currentUserId: string): Promise<User[]>;
   canViewProfile(viewerId: string, targetUserId: string): Promise<boolean>;
-  sanitizeUserData(targetUser: User, viewerId: string, hasConnection?: boolean): Promise<User>;
-  getUserConnections(userId: string): Promise<Set<string>>;
+  sanitizeUserData(targetUser: User, viewerId: string): Promise<User>;
   
   // Photo operations
   createPhoto(photo: InsertUserPhoto): Promise<UserPhoto>;
@@ -173,34 +170,6 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(users);
   }
 
-  async getUsersFiltered(currentUserId: string, currentUserRole: string): Promise<User[]> {
-    // Build the query with database-level filtering
-    let query = db.select().from(users)
-      .where(
-        and(
-          ne(users.id, currentUserId), // Exclude current user
-          ne(users.profileVisibility, 'hidden') // Exclude hidden users
-        )
-      );
-    
-    // If current user is a regular user, only show admins and super admins
-    if (currentUserRole === 'user') {
-      query = db.select().from(users)
-        .where(
-          and(
-            ne(users.id, currentUserId),
-            ne(users.profileVisibility, 'hidden'),
-            or(
-              eq(users.role, 'admin'),
-              eq(users.role, 'super_admin')
-            )
-          )
-        );
-    }
-    
-    return await query;
-  }
-
   async getUsersByIds(ids: string[]): Promise<User[]> {
     if (ids.length === 0) return [];
     return await db.select().from(users).where(inArray(users.id, ids));
@@ -222,168 +191,64 @@ export class DatabaseStorage implements IStorage {
     return conversation;
   }
 
-  async getUserConversations(userId: string, limit: number = 50, offset: number = 0): Promise<ConversationWithDetails[]> {
-    // Optimized single-query approach using CTE and lateral joins with pagination
-    const result = await db.execute<any>(sql`
-      WITH user_conversations AS (
-        -- Get conversation IDs for this user with pagination
-        SELECT conversation_id
-        FROM conversation_participants
-        WHERE user_id = ${userId}
-        ORDER BY conversation_id
-        LIMIT ${limit} OFFSET ${offset}
-      ),
-      conversation_data AS (
-        -- Get conversations with last message and unread count in one go
-        SELECT 
-          c.*,
-          lm.id as last_message_id,
-          lm.sender_id as last_message_sender_id,
-          lm.content as last_message_content,
-          lm.type as last_message_type,
-          lm.status as last_message_status,
-          lm.created_at as last_message_created_at,
-          lm.updated_at as last_message_updated_at,
-          lm.file_url as last_message_file_url,
-          lm.file_name as last_message_file_name,
-          lm.file_size as last_message_file_size,
-          lm.mime_type as last_message_mime_type,
-          lm.reply_to_id as last_message_reply_to_id,
-          lm.forwarded_from as last_message_forwarded_from,
-          lm.media_object_key as last_message_media_object_key,
-          lm.call_type as last_message_call_type,
-          lm.is_edited as last_message_is_edited,
-          lm.is_encrypted as last_message_is_encrypted,
-          lm.expires_at as last_message_expires_at,
-          lm.call_duration as last_message_call_duration,
-          (
-            SELECT COUNT(*)
-            FROM messages m
-            INNER JOIN conversation_participants cp 
-              ON cp.conversation_id = m.conversation_id 
-              AND cp.user_id = ${userId}
-            WHERE m.conversation_id = c.id
-              AND m.created_at > COALESCE(cp.last_read_at, '1970-01-01'::timestamp)
-          ) as unread_count
-        FROM conversations c
-        INNER JOIN user_conversations uc ON c.id = uc.conversation_id
-        LEFT JOIN LATERAL (
-          SELECT *
-          FROM messages
-          WHERE conversation_id = c.id
-          ORDER BY created_at DESC
-          LIMIT 1
-        ) lm ON true
-        ORDER BY c.updated_at DESC
+  async getUserConversations(userId: string): Promise<ConversationWithDetails[]> {
+    const userConvs = await db
+      .select({
+        conversation: conversations,
+        participant: conversationParticipants,
+        user: users,
+      })
+      .from(conversationParticipants)
+      .innerJoin(conversations, eq(conversationParticipants.conversationId, conversations.id))
+      .leftJoin(users, eq(conversationParticipants.userId, users.id))
+      .where(
+        inArray(
+          conversations.id,
+          db.select({ id: conversationParticipants.conversationId })
+            .from(conversationParticipants)
+            .where(eq(conversationParticipants.userId, userId))
+        )
       )
-      SELECT 
-        cd.*,
-        cp.id as participant_id,
-        cp.user_id as participant_user_id,
-        cp.role as participant_role,
-        cp.joined_at as participant_joined_at,
-        cp.last_read_at as participant_last_read_at,
-        u.id as user_id,
-        u.email as user_email,
-        u.username as user_username,
-        u.mobile_number as user_mobile_number,
-        u.full_name as user_full_name,
-        u.profile_image_url as user_profile_image_url,
-        u.status as user_status,
-        u.role as user_role,
-        u.is_system_admin as user_is_system_admin,
-        u.last_seen as user_last_seen,
-        u.is_registered as user_is_registered,
-        u.profile_visibility as user_profile_visibility,
-        u.location_privacy as user_location_privacy,
-        u.last_seen_visibility as user_last_seen_visibility,
-        u.online_status_visibility as user_online_status_visibility,
-        u.created_at as user_created_at,
-        u.updated_at as user_updated_at
-      FROM conversation_data cd
-      LEFT JOIN conversation_participants cp ON cd.id = cp.conversation_id
-      LEFT JOIN users u ON cp.user_id = u.id
-      ORDER BY cd.updated_at DESC
-    `);
+      .orderBy(desc(conversations.updatedAt));
 
-    if (result.rows.length === 0) {
-      return [];
-    }
-
-    // Build conversation map from the single query result
     const convMap = new Map<string, ConversationWithDetails>();
 
-    for (const row of result.rows) {
-      if (!convMap.has(row.id)) {
-        // Create last message object if it exists
-        const lastMessage = row.last_message_id ? {
-          id: row.last_message_id,
-          conversationId: row.id,
-          senderId: row.last_message_sender_id,
-          content: row.last_message_content,
-          type: row.last_message_type,
-          status: row.last_message_status,
-          createdAt: row.last_message_created_at,
-          updatedAt: row.last_message_updated_at,
-          fileUrl: row.last_message_file_url,
-          fileName: row.last_message_file_name,
-          fileSize: row.last_message_file_size,
-          mimeType: row.last_message_mime_type,
-          replyToId: row.last_message_reply_to_id,
-          forwardedFrom: row.last_message_forwarded_from,
-          mediaObjectKey: row.last_message_media_object_key,
-          callType: row.last_message_call_type,
-          isEdited: row.last_message_is_edited,
-          isEncrypted: row.last_message_is_encrypted,
-          expiresAt: row.last_message_expires_at,
-          callDuration: row.last_message_call_duration,
-        } : undefined;
+    for (const row of userConvs) {
+      if (!convMap.has(row.conversation.id)) {
+        const lastMessage = await db
+          .select()
+          .from(messages)
+          .where(eq(messages.conversationId, row.conversation.id))
+          .orderBy(desc(messages.createdAt))
+          .limit(1);
 
-        convMap.set(row.id, {
-          id: row.id,
-          isGroup: row.is_group,
-          isBroadcast: row.is_broadcast,
-          name: row.name,
-          description: row.description,
-          avatarUrl: row.avatar_url,
-          createdBy: row.created_by,
-          disappearingMessagesTimer: row.disappearing_messages_timer,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
+        const unreadMessages = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.conversationId, row.conversation.id),
+              sql`${messages.createdAt} > COALESCE((
+                SELECT ${conversationParticipants.lastReadAt} 
+                FROM ${conversationParticipants} 
+                WHERE ${conversationParticipants.conversationId} = ${messages.conversationId} 
+                AND ${conversationParticipants.userId} = ${userId}
+              ), '1970-01-01')`
+            )
+          );
+
+        convMap.set(row.conversation.id, {
+          ...row.conversation,
           participants: [],
-          lastMessage,
-          unreadCount: Number(row.unread_count) || 0,
+          lastMessage: lastMessage[0],
+          unreadCount: Number(unreadMessages[0]?.count || 0),
         });
       }
 
-      // Add participant if exists
-      if (row.participant_id && row.user_id) {
-        convMap.get(row.id)!.participants.push({
-          id: row.participant_id,
-          conversationId: row.id,
-          userId: row.participant_user_id,
-          role: row.participant_role,
-          joinedAt: row.participant_joined_at,
-          lastReadAt: row.participant_last_read_at,
-          user: {
-            id: row.user_id,
-            email: row.user_email,
-            username: row.user_username,
-            mobileNumber: row.user_mobile_number,
-            fullName: row.user_full_name,
-            profileImageUrl: row.user_profile_image_url,
-            status: row.user_status,
-            role: row.user_role,
-            isSystemAdmin: row.user_is_system_admin,
-            lastSeen: row.user_last_seen,
-            isRegistered: row.user_is_registered,
-            profileVisibility: row.user_profile_visibility,
-            locationPrivacy: row.user_location_privacy,
-            lastSeenVisibility: row.user_last_seen_visibility,
-            onlineStatusVisibility: row.user_online_status_visibility,
-            createdAt: row.user_created_at,
-            updatedAt: row.user_updated_at,
-          },
+      if (row.participant && row.user) {
+        convMap.get(row.conversation.id)!.participants.push({
+          ...row.participant,
+          user: row.user,
         });
       }
     }
@@ -933,20 +798,6 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getParticipant(conversationId: string, userId: string): Promise<ConversationParticipant | undefined> {
-    const [participant] = await db
-      .select()
-      .from(conversationParticipants)
-      .where(
-        and(
-          eq(conversationParticipants.conversationId, conversationId),
-          eq(conversationParticipants.userId, userId)
-        )
-      );
-
-    return participant;
-  }
-
   async addGroupParticipant(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<void> {
     await db.insert(conversationParticipants).values({
       conversationId,
@@ -1082,29 +933,13 @@ export class DatabaseStorage implements IStorage {
     return sharedConvo.length > 0;
   }
 
-  // Get all user IDs that the current user has conversations with
-  async getUserConnections(userId: string): Promise<Set<string>> {
-    const result = await db.execute<{ user_id: string }>(sql`
-      SELECT DISTINCT cp2.user_id
-      FROM conversation_participants cp1
-      INNER JOIN conversation_participants cp2 
-        ON cp1.conversation_id = cp2.conversation_id
-        AND cp2.user_id != ${userId}
-      WHERE cp1.user_id = ${userId}
-    `);
-    
-    return new Set(result.rows.map(row => row.user_id));
-  }
-
   // Helper method to sanitize user data based on privacy settings
-  async sanitizeUserData(targetUser: User, viewerId: string, hasConnection?: boolean): Promise<User> {
+  async sanitizeUserData(targetUser: User, viewerId: string): Promise<User> {
     // Create a copy to avoid mutating original
     const sanitizedUser = { ...targetUser };
     
-    // Use provided hasConnection or fetch it if not provided
-    const connection = hasConnection !== undefined 
-      ? hasConnection 
-      : await this.hasConversationWith(viewerId, targetUser.id);
+    // Check if viewer has chatted with target
+    const hasConnection = await this.hasConversationWith(viewerId, targetUser.id);
     
     // Apply location privacy
     switch (targetUser.locationPrivacy) {
@@ -1127,7 +962,7 @@ export class DatabaseStorage implements IStorage {
     // Apply last seen privacy
     if (targetUser.lastSeenVisibility === 'hidden') {
       sanitizedUser.lastSeen = null;
-    } else if (targetUser.lastSeenVisibility === 'connections' && !connection) {
+    } else if (targetUser.lastSeenVisibility === 'connections' && !hasConnection) {
       sanitizedUser.lastSeen = null;
     }
     

@@ -50,7 +50,6 @@ import { GroupSettingsDialog } from "@/components/GroupSettingsDialog";
 import { EncryptionSetupDialog } from "@/components/EncryptionSetupDialog";
 import { VideoCallDialog } from "@/components/VideoCallDialog";
 import { UserDetailsDialog } from "@/components/UserDetailsDialog";
-import { ViewMembersDialog } from "@/components/ViewMembersDialog";
 import {
   getUserDisplayName,
   formatLastSeen,
@@ -118,7 +117,6 @@ export default function Home() {
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [userDetailsDialogOpen, setUserDetailsDialogOpen] = useState(false);
   const [selectedUserForDetails, setSelectedUserForDetails] = useState<User | null>(null);
-  const [viewMembersDialogOpen, setViewMembersDialogOpen] = useState(false);
   const [callType, setCallType] = useState<"audio" | "video">("audio");
   const [isCallInitiator, setIsCallInitiator] = useState(false);
   const [incomingCallSignal, setIncomingCallSignal] = useState<any>(null);
@@ -251,23 +249,12 @@ export default function Home() {
   );
 
   // Fetch messages for selected conversation (no polling, only WebSocket updates)
-  const { data: messages = [], isLoading: messagesLoading, error: messagesError } = useQuery<
+  const { data: messages = [], isLoading: messagesLoading } = useQuery<
     MessageWithSender[]
   >({
     queryKey: ["/api/messages", selectedConversationId],
     enabled: !!selectedConversationId,
-    staleTime: 0,
   });
-
-  // Debug logging
-  useEffect(() => {
-    console.log("[Messages Query] State:", {
-      selectedConversationId,
-      messagesLoading,
-      messagesCount: messages?.length,
-      error: messagesError,
-    });
-  }, [selectedConversationId, messagesLoading, messages, messagesError]);
 
   // When a conversation is opened, invalidate conversations list after a short delay
   // to allow the backend to mark messages as read and update unread count
@@ -315,7 +302,7 @@ export default function Home() {
     }
   }, [selectedConversationId, encryptionKeys]);
 
-  // Send message mutation using Socket.IO for instant delivery
+  // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async ({
       content,
@@ -338,24 +325,6 @@ export default function Home() {
       replyToId?: string;
       isEncrypted?: boolean;
     }) => {
-      if (wsConnected && sendWsMessage) {
-        sendWsMessage({
-          type: 'send_message',
-          data: {
-            conversationId: selectedConversationId,
-            content,
-            fileUrl,
-            fileName,
-            fileSize,
-            mediaObjectKey,
-            mimeType,
-            type: type || "text",
-            replyToId,
-          },
-        });
-        return Promise.resolve();
-      }
-      
       return apiRequest("POST", "/api/messages", {
         conversationId: selectedConversationId,
         content,
@@ -495,16 +464,10 @@ export default function Home() {
     },
   });
 
-  // Scroll to bottom on new messages with delay to ensure DOM update
+  // Scroll to bottom on new messages
   useEffect(() => {
-    if (messages && messages.length > 0) {
-      // Use setTimeout to ensure DOM has rendered the new message
-      const timer = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [messages?.length]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Handle scroll to detect if user is at bottom
   useEffect(() => {
@@ -1205,21 +1168,9 @@ export default function Home() {
                             </h2>
                             {selectedConversation.isGroup ||
                             selectedConversation.isBroadcast ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (selectedConversation.isGroup) {
-                                    setViewMembersDialogOpen(true);
-                                  }
-                                }}
-                                className={`text-xs text-muted-foreground text-left ${
-                                  selectedConversation.isGroup ? 'hover:text-foreground cursor-pointer' : ''
-                                }`}
-                                data-testid="button-view-members"
-                                disabled={!selectedConversation.isGroup}
-                              >
+                              <p className="text-xs text-muted-foreground">
                                 {selectedConversation.participants.length} members
-                              </button>
+                              </p>
                             ) : (
                               <p
                                 className="text-xs text-muted-foreground"
@@ -1595,15 +1546,6 @@ export default function Home() {
               } as any);
             }
           }}
-        />
-      )}
-
-      {selectedConversationId && (
-        <ViewMembersDialog
-          conversationId={selectedConversationId}
-          open={viewMembersDialogOpen}
-          onOpenChange={setViewMembersDialogOpen}
-          onlineUserIds={Array.from(onlineUsers)}
         />
       )}
 

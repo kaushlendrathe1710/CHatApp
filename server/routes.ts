@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { Server as SocketIOServer } from "socket.io";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
 import session from "express-session";
@@ -9,34 +9,43 @@ import { S3StorageService, ObjectNotFoundError, ObjectPermission } from "./s3Sto
 import { insertConversationSchema, insertMessageSchema, createGroupSchema, addParticipantSchema, updateParticipantRoleSchema } from "@shared/schema";
 import { z } from "zod";
 
-// Socket.IO instance (initialized in registerRoutes)
-let io: SocketIOServer;
+// WebSocket client tracking
+const wsClients = new Map<string, Set<WebSocket>>();
+const wsUserMap = new Map<WebSocket, string>(); // Maps WebSocket to userId
 
-// Track online users
-const onlineUsers = new Set<string>();
-
-// Helper function to broadcast presence updates
-async function broadcastPresenceUpdate() {
-  const onlineUserIds = Array.from(onlineUsers);
+// Helper function to broadcast presence updates to all active conversations
+function broadcastPresenceUpdate() {
+  const onlineUserIds = Array.from(new Set(wsUserMap.values()));
   
-  // Filter out users who have disabled online status visibility
-  const visibleOnlineUserIds: string[] = [];
-  for (const userId of onlineUserIds) {
-    try {
-      const user = await storage.getUser(userId);
-      if (user && user.onlineStatusVisibility) {
-        visibleOnlineUserIds.push(userId);
-      }
-    } catch (error) {
-      console.error('[Socket.IO] Error checking user privacy:', error);
+  // Collect unique WebSocket clients to avoid sending duplicates
+  const uniqueClients = new Set<WebSocket>();
+  wsClients.forEach((clients) => {
+    clients.forEach(client => uniqueClients.add(client));
+  });
+  
+  // Send presence update to each unique client only once
+  const presenceMessage = JSON.stringify({
+    type: 'presence',
+    data: { onlineUserIds },
+  });
+  
+  uniqueClients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(presenceMessage);
     }
-  }
-  
-  io.emit('presence', { onlineUserIds: visibleOnlineUserIds });
+  });
 }
 
 export function broadcastToConversation(conversationId: string, message: any) {
-  io.to(conversationId).emit(message.type, message.data);
+  const clients = wsClients.get(conversationId);
+  if (clients) {
+    const messageStr = JSON.stringify(message);
+    clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(messageStr);
+      }
+    });
+  }
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -54,7 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.set("trust proxy", 1);
-  const sessionMiddleware = session({
+  app.use(session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
     resave: false,
@@ -65,9 +74,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sameSite: 'lax', // CSRF protection
       maxAge: sessionTtl,
     },
-  });
-  
-  app.use(sessionMiddleware);
+  }));
 
   // Auth routes
   setupAuth(app);
@@ -78,18 +85,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentUserId = req.user.id;
       const currentUserRole = req.user.role || 'user';
       
-      // Use database-level filtering for better performance
-      const filteredUsers = await storage.getUsersFiltered(currentUserId, currentUserRole);
+      const allUsers = await storage.getAllUsers();
       
-      // Batch fetch all user connections in one query to avoid N+1 problem
-      const userConnections = await storage.getUserConnections(currentUserId);
+      // Role-based filtering: Regular users can only see admins and super admins
+      let filteredUsers = allUsers
+        .filter(u => u.id !== currentUserId) // Exclude current user
+        .filter(u => u.profileVisibility !== 'hidden'); // Exclude hidden users
+      
+      // If current user is a regular user, only show admins and super admins
+      if (currentUserRole === 'user') {
+        filteredUsers = filteredUsers.filter(u => u.role === 'admin' || u.role === 'super_admin');
+      }
+      // Admins and super admins can see everyone
       
       // Sanitize each user's data based on their privacy settings
       const sanitizedUsers = await Promise.all(
-        filteredUsers.map(user => {
-          const hasConnection = userConnections.has(user.id);
-          return storage.sanitizeUserData(user, currentUserId, hasConnection);
-        })
+        filteredUsers.map(user => storage.sanitizeUserData(user, currentUserId))
       );
       
       res.json(sanitizedUsers);
@@ -535,11 +546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      // Parse pagination parameters with defaults
-      const limit = parseInt(req.query.limit as string) || 20;
-      const offset = parseInt(req.query.offset as string) || 0;
-      
-      const conversations = await storage.getUserConversations(userId, limit, offset);
+      const conversations = await storage.getUserConversations(userId);
       res.json(conversations);
     } catch (error) {
       console.error("Error fetching conversations:", error);
@@ -928,15 +935,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
-      // Broadcast new message via Socket.IO
+      // Broadcast new message via WebSocket
       broadcastToConversation(conversationId, {
         type: 'message',
         data: { ...message, conversationId },
       });
 
-      // Check if there are active sockets in the conversation room (excluding sender)
-      const socketsInRoom = await io.in(conversationId).fetchSockets();
-      const hasRecipientOnline = socketsInRoom.length > 0;
+      // If there are active WebSocket clients (excluding sender) in the conversation, mark as delivered
+      const clients = wsClients.get(conversationId);
+      const hasRecipientOnline = clients && Array.from(clients).some(client => wsUserMap.get(client) !== userId);
       
       if (hasRecipientOnline) {
         await storage.updateMessageStatus(message.id, 'delivered');
@@ -1262,207 +1269,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
 
-  // Create Socket.IO server
-  io = new SocketIOServer(httpServer, {
-    path: "/socket.io",
-    cors: {
-      origin: true,
-      credentials: true,
-    },
-  });
+  // Create WebSocket server with built-in path filtering for /ws
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  console.log('[WebSocket] Server attached to /ws path');
 
-  console.log('[Socket.IO] Server initialized');
-
-  // Authenticate Socket.IO connections using session
-  io.use((socket, next) => {
-    const req = socket.request as any;
-    const res = {} as any;
-    
-    sessionMiddleware(req, res, (err?: any) => {
-      if (err) {
-        console.error('[Socket.IO] Session middleware error:', err);
-        return next(new Error('Session error'));
-      }
-
-      const userId = req.session?.userId;
-
-      if (!userId) {
-        console.warn('[Socket.IO] Unauthenticated connection attempt');
-        return next(new Error('Unauthorized'));
-      }
-
-      // Store authenticated userId in socket data
-      socket.data.userId = userId;
-      console.log('[Socket.IO] Authenticated socket for user:', userId);
-      next();
-    });
-  });
-
-  io.on('connection', (socket) => {
-    const userId = socket.data.userId;
-    onlineUsers.add(userId);
-
-    console.log('[Socket.IO] Client connected:', socket.id, 'User:', userId);
-    
-    // Broadcast presence update immediately when user connects
-    broadcastPresenceUpdate();
+  wss.on('connection', (ws: WebSocket, req: any) => {
+    console.log('[WebSocket] Client connected from:', req.socket.remoteAddress);
     
     let userConversations: string[] = [];
+    let isAlive = true;
 
-    // Handle joining conversations with authorization
-    socket.on('join_conversations', async ({ conversationIds }: { conversationIds: string[] }) => {
-      const authenticatedUserId = socket.data.userId;
+    // Heartbeat mechanism
+    ws.on('pong', () => {
+      isAlive = true;
+    });
 
-      // Leave old conversations
+    const pingInterval = setInterval(() => {
+      if (!isAlive) {
+        console.log('[WebSocket] Client failed to respond to ping, terminating');
+        clearInterval(pingInterval);
+        return ws.terminate();
+      }
+      isAlive = false;
+      ws.ping();
+    }, 30000);
+
+    ws.on('message', (data: string) => {
+      try {
+        const message = JSON.parse(data.toString());
+
+        if (message.type === 'typing') {
+          broadcastToConversation(message.data.conversationId, message);
+        } else if (message.type === 'join_conversations') {
+          const newConversationIds = message.data.conversationIds || [];
+          const userId = message.data.userId;
+
+          if (userId) {
+            wsUserMap.set(ws, userId);
+          }
+
+          if (newConversationIds.length > 0 || userConversations.length > 0) {
+            const oldSet = new Set(userConversations);
+            const newSet = new Set(newConversationIds);
+
+            const toRemove = userConversations.filter((convId: string) => !newSet.has(convId));
+            const toAdd = newConversationIds.filter((convId: string) => !oldSet.has(convId));
+
+            toRemove.forEach((convId: string) => {
+              const clients = wsClients.get(convId);
+              if (clients) {
+                clients.delete(ws);
+                if (clients.size === 0) {
+                  wsClients.delete(convId);
+                }
+              }
+            });
+
+            toAdd.forEach((convId: string) => {
+              if (!wsClients.has(convId)) {
+                wsClients.set(convId, new Set());
+              }
+              wsClients.get(convId)!.add(ws);
+            });
+
+            userConversations = newConversationIds;
+          }
+
+          broadcastPresenceUpdate();
+        } else if (message.type === 'call_signal') {
+          broadcastToConversation(message.data.conversationId, message);
+        } else if (message.type === 'call_initiate') {
+          broadcastToConversation(message.data.conversationId, message);
+        } else if (message.type === 'call_end') {
+          broadcastToConversation(message.data.conversationId, message);
+        }
+      } catch (error) {
+        console.error('Error handling WebSocket message:', error);
+      }
+    });
+
+    ws.on('close', () => {
+      clearInterval(pingInterval);
       userConversations.forEach((convId) => {
-        socket.leave(convId);
+        const clients = wsClients.get(convId);
+        if (clients) {
+          clients.delete(ws);
+          if (clients.size === 0) {
+            wsClients.delete(convId);
+          }
+        }
       });
-
-      // Only join conversations where user is a participant
-      const authorizedConversations: string[] = [];
-      for (const convId of conversationIds) {
-        try {
-          const conversation = await storage.getConversation(convId);
-          if (!conversation) {
-            continue;
-          }
-          
-          const participant = await storage.getParticipant(convId, authenticatedUserId);
-          
-          if (participant) {
-            socket.join(convId);
-            authorizedConversations.push(convId);
-          } else {
-            console.warn(`[Socket.IO] User ${authenticatedUserId} attempted to join unauthorized conversation ${convId}`);
-          }
-        } catch (error) {
-          console.error(`[Socket.IO] Error validating conversation ${convId}:`, error);
-        }
-      }
-
-      userConversations = authorizedConversations;
+      wsUserMap.delete(ws);
+      console.log('WebSocket client disconnected');
       broadcastPresenceUpdate();
     });
 
-    // Handle incoming messages via Socket.IO for instant delivery
-    socket.on('send_message', async (data: {
-      conversationId: string;
-      content?: string;
-      type?: string;
-      fileUrl?: string;
-      fileName?: string;
-      fileSize?: number;
-      mediaObjectKey?: string;
-      mimeType?: string;
-      replyToId?: string;
-    }) => {
-      try {
-        const authenticatedUserId = socket.data.userId;
-
-        const { conversationId, content, type, fileUrl, fileName, fileSize, mediaObjectKey, mimeType, replyToId } = data;
-
-        const conversation = await storage.getConversation(conversationId);
-        if (!conversation) {
-          socket.emit('error', { message: 'Conversation not found' });
-          return;
-        }
-
-        const participant = await storage.getParticipant(conversationId, authenticatedUserId);
-        if (!participant) {
-          socket.emit('error', { message: 'Not a member of this conversation' });
-          return;
-        }
-
-        if (conversation.isBroadcast) {
-          const canSend = await storage.canSendToBroadcast(conversationId, authenticatedUserId);
-          if (!canSend) {
-            socket.emit('error', { message: 'Only admins can post to broadcast channels' });
-            return;
-          }
-        }
-
-        let expiresAt: Date | null = null;
-        if (conversation?.disappearingMessagesTimer && conversation.disappearingMessagesTimer > 0) {
-          const timerMs = Number(conversation.disappearingMessagesTimer);
-          expiresAt = new Date(Date.now() + timerMs);
-        }
-
-        const message = await storage.createMessage({
-          conversationId,
-          senderId: authenticatedUserId,
-          content,
-          type: type || 'text',
-          fileUrl,
-          fileName,
-          fileSize,
-          mediaObjectKey,
-          mimeType,
-          replyToId,
-          expiresAt,
-        });
-
-        const socketsInRoom = await io.in(conversationId).fetchSockets();
-        const hasRecipientOnline = socketsInRoom.length > 0;
-        
-        if (hasRecipientOnline) {
-          await storage.updateMessageStatus(message.id, 'delivered');
-          io.to(conversationId).emit('status_update', {
-            conversationId,
-            messageId: message.id,
-            status: 'delivered',
-            userId: authenticatedUserId,
-          });
-        }
-
-        io.to(conversationId).emit('message', { ...message, conversationId });
-      } catch (error) {
-        console.error('[Socket.IO] Error sending message:', error);
-        socket.emit('error', { message: 'Failed to send message' });
-      }
-    });
-
-    // Handle typing indicator
-    socket.on('typing', async ({ conversationId }: { conversationId: string }) => {
-      const authenticatedUserId = socket.data.userId;
-      
-      try {
-        const user = await storage.getUser(authenticatedUserId);
-        if (user) {
-          socket.to(conversationId).emit('typing', { 
-            conversationId,
-            userId: authenticatedUserId,
-            userName: user.fullName || user.email
-          });
-        }
-      } catch (error) {
-        console.error('[Socket.IO] Error broadcasting typing indicator:', error);
-      }
-    });
-
-    // Handle WebRTC signaling
-    socket.on('call_signal', (data) => {
-      socket.to(data.conversationId).emit('call_signal', data);
-    });
-
-    socket.on('call_initiate', (data) => {
-      socket.to(data.conversationId).emit('call_initiate', data);
-    });
-
-    socket.on('call_end', (data) => {
-      socket.to(data.conversationId).emit('call_end', data);
-    });
-
-    socket.on('disconnect', () => {
-      const authenticatedUserId = socket.data.userId;
-      console.log('[Socket.IO] Client disconnected:', socket.id, 'User:', authenticatedUserId);
-      if (authenticatedUserId) {
-        onlineUsers.delete(authenticatedUserId);
-      }
-      broadcastPresenceUpdate();
-    });
-
-    socket.on('error', (error) => {
-      console.error('[Socket.IO] Socket error:', error);
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
     });
   });
 

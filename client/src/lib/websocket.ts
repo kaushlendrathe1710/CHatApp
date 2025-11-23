@@ -1,24 +1,16 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
 export type WebSocketMessage = {
-  type: 'message' | 'typing' | 'presence' | 'status_update' | 'join_conversations' | 'reaction_added' | 'message_edited' | 'message_deleted' | 'settings_updated' | 'call_initiate' | 'call_signal' | 'call_end' | 'encryption_key_added' | 'send_message';
+  type: 'message' | 'typing' | 'presence' | 'status_update' | 'join_conversations' | 'reaction_added' | 'message_edited' | 'message_deleted' | 'settings_updated';
   data: any;
 };
 
-type SocketIO = any;
-
 export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, conversationIds?: string[], userId?: string) {
-  const socketRef = useRef<SocketIO | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isScriptLoaded, setIsScriptLoaded] = useState(false);
-  const onMessageRef = useRef(onMessage);
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const isConnectingRef = useRef(false);
   const conversationIdsRef = useRef(conversationIds);
   const userIdRef = useRef(userId);
-
-  // Keep refs updated
-  useEffect(() => {
-    onMessageRef.current = onMessage;
-  }, [onMessage]);
 
   useEffect(() => {
     conversationIdsRef.current = conversationIds;
@@ -28,106 +20,111 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     userIdRef.current = userId;
   }, [userId]);
 
-  // Load Socket.IO script
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    const existingScript = document.querySelector('script[src="/socket.io/socket.io.js"]');
-    if (existingScript) {
-      setIsScriptLoaded(true);
+  const connect = useCallback(() => {
+    if (isConnectingRef.current || (socketRef.current && socketRef.current.readyState === WebSocket.OPEN)) {
       return;
     }
 
-    const script = document.createElement('script');
-    script.src = '/socket.io/socket.io.js';
-    script.async = true;
-    script.onload = () => {
-      console.log('[Socket.IO] Script loaded');
-      setIsScriptLoaded(true);
-    };
-    script.onerror = () => {
-      console.error('[Socket.IO] Failed to load script');
-    };
-    document.body.appendChild(script);
-  }, []);
-
-  // Connect socket when script is loaded
-  useEffect(() => {
-    if (!isScriptLoaded || !window.io || socketRef.current) {
-      return;
-    }
-
-    console.log('[Socket.IO] Connecting...');
+    isConnectingRef.current = true;
     
-    const socket = window.io({
-      path: "/socket.io",
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 3000,
-      withCredentials: true,
-    });
+    // Construct WebSocket URL with dedicated /ws path
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+    
+    console.log('[WebSocket] Connecting to:', wsUrl);
+    
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch (error) {
+      console.error('[WebSocket] Failed to create WebSocket:', error);
+      isConnectingRef.current = false;
+      return;
+    }
 
-    socket.on('connect', () => {
-      console.log('[Socket.IO] Connected successfully');
-      setIsConnected(true);
+    socket.onopen = () => {
+      console.log('[WebSocket] Connected successfully');
+      isConnectingRef.current = false;
       
-      if (conversationIdsRef.current?.length) {
-        socket.emit('join_conversations', {
-          conversationIds: conversationIdsRef.current
-        });
+      // Join conversations after connecting
+      if (conversationIdsRef.current && conversationIdsRef.current.length > 0) {
+        socket.send(JSON.stringify({
+          type: 'join_conversations',
+          data: { 
+            conversationIds: conversationIdsRef.current,
+            userId: userIdRef.current
+          }
+        }));
       }
-    });
+    };
 
-    socket.onAny((eventName: string, data: any) => {
-      console.log('[Socket.IO] Received:', eventName, data);
-      onMessageRef.current?.({ type: eventName as any, data });
-    });
+    socket.onmessage = (event) => {
+      try {
+        const message: WebSocketMessage = JSON.parse(event.data);
+        onMessage?.(message);
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    };
 
-    socket.on('disconnect', (reason: string) => {
-      console.log('[Socket.IO] Disconnected:', reason);
-      setIsConnected(false);
-    });
+    socket.onerror = (error) => {
+      console.error('[WebSocket] Error:', error);
+      isConnectingRef.current = false;
+    };
 
-    socket.on('error', (error: Error) => {
-      console.error('[Socket.IO] Error:', error);
-    });
+    socket.onclose = (event) => {
+      console.log('[WebSocket] Disconnected:', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
+      isConnectingRef.current = false;
+      socketRef.current = null;
+      
+      // Reconnect after 3 seconds
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connect();
+      }, 3000);
+    };
 
     socketRef.current = socket;
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [isScriptLoaded]);
-
-  // Re-join conversations when they change
-  useEffect(() => {
-    if (socketRef.current?.connected && conversationIdsRef.current?.length) {
-      socketRef.current.emit('join_conversations', {
-        conversationIds: conversationIdsRef.current
-      });
-    }
-  }, [conversationIds]);
+  }, [onMessage]);
 
   const sendMessage = useCallback((message: WebSocketMessage) => {
-    if (socketRef.current?.connected) {
-      socketRef.current.emit(message.type, message.data);
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(message));
     }
   }, []);
 
   const disconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
     if (socketRef.current) {
-      socketRef.current.disconnect();
+      socketRef.current.close();
       socketRef.current = null;
-      setIsConnected(false);
     }
   }, []);
 
-  return { sendMessage, disconnect, isConnected };
-}
+  useEffect(() => {
+    connect();
+    return () => {
+      disconnect();
+    };
+  }, [connect, disconnect]);
 
-declare global {
-  interface Window {
-    io: any;
-  }
+  // Re-join conversations when they change
+  useEffect(() => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && conversationIds && conversationIds.length > 0) {
+      socketRef.current.send(JSON.stringify({
+        type: 'join_conversations',
+        data: { 
+          conversationIds,
+          userId: userIdRef.current
+        }
+      }));
+    }
+  }, [conversationIds]);
+
+  return { sendMessage, disconnect, isConnected: socketRef.current?.readyState === WebSocket.OPEN };
 }

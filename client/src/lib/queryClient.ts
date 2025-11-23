@@ -14,12 +14,6 @@ class ApiError extends Error {
 }
 
 async function throwIfResNotOk(res: Response) {
-  // 304 Not Modified is a valid response - browser should use cached data
-  // but we disable caching with cache: "no-store" so this shouldn't happen
-  if (res.status === 304) {
-    return;
-  }
-  
   if (!res.ok) {
     let data: any;
     const contentType = res.headers.get('content-type');
@@ -69,7 +63,6 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
-      cache: "no-store",
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
