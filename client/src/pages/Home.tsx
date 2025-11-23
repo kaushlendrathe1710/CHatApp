@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { useViewportSafeArea } from "@/hooks/useViewportSafeArea";
 import { useWebSocket } from "@/lib/websocket";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,9 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 export default function Home() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  
+  // Track visual viewport offset for Android browser chrome
+  useViewportSafeArea();
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
   >(null);
@@ -916,7 +920,15 @@ export default function Home() {
 
   return (
     <>
-      <div className="h-screen flex overflow-hidden bg-background" style={{ height: '100dvh' }}>
+      <div 
+        className="flex overflow-hidden bg-background" 
+        style={{ 
+          minHeight: '100dvh',
+          boxSizing: 'border-box',
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--viewport-safe-top, 0px))',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + var(--viewport-safe-bottom, 0px))',
+        }}
+      >
         {/* Sidebar - Chat List */}
         <div
           className={`
