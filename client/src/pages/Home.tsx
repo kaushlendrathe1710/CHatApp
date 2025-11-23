@@ -65,6 +65,7 @@ import {
   requestNotificationPermission,
   showBrowserNotification,
 } from "@/lib/notifications";
+import { notificationSoundManager } from "@/lib/notificationSounds";
 import type {
   ConversationWithDetails,
   MessageWithSender,
@@ -140,6 +141,30 @@ export default function Home() {
   const { toast } = useToast();
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
+  // Fetch and sync notification sound settings
+  const { data: notificationSoundSettings } = useQuery<{
+    userId: string;
+    notificationSoundEnabled: boolean;
+    notificationSoundType: string;
+    notificationVolume: number;
+  }>({
+    queryKey: ['/api/users/notification-sound', user?.id],
+    enabled: !!user,
+  });
+
+  // Hydrate notification sound settings when they load (with user ID validation)
+  // Note: Global reset on auth change is handled by AuthTransitionObserver in App.tsx
+  useEffect(() => {
+    // Only hydrate if we have settings, a user, and the settings belong to the current user
+    if (notificationSoundSettings && user && notificationSoundSettings.userId === user.id) {
+      notificationSoundManager.hydrate({
+        enabled: notificationSoundSettings.notificationSoundEnabled,
+        soundType: notificationSoundSettings.notificationSoundType as any,
+        volume: notificationSoundSettings.notificationVolume,
+      });
+    }
+  }, [notificationSoundSettings, user]);
+
   // Fetch conversations first (needed by WebSocket hook)
   const { data: conversations = [], isLoading: conversationsLoading } =
     useQuery<ConversationWithDetails[]>({
@@ -211,6 +236,13 @@ export default function Home() {
                   setSelectedConversationId(message.data.conversationId);
                 },
               });
+
+              // Play notification sound only for messages from other users
+              if (message.data.senderId !== user?.id) {
+                notificationSoundManager.play().catch((err) => {
+                  console.error('[NotificationSound] Failed to play:', err);
+                });
+              }
             }
           }
         } else if (message.type === "typing") {

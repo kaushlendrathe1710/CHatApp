@@ -5,11 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, Shield, Eye, MapPin, Clock } from "lucide-react";
+import { ArrowLeft, Shield, Eye, MapPin, Clock, Volume2 } from "lucide-react";
 import { useLocation } from "wouter";
+import { notificationSoundManager } from "@/lib/notificationSounds";
 import type { User } from "@shared/schema";
+import type { NotificationSoundType } from "@/lib/notificationSounds";
 
 export default function PrivacySettings() {
   const [, setLocation] = useLocation();
@@ -20,13 +23,29 @@ export default function PrivacySettings() {
     queryKey: ['/api/auth/user'],
   });
 
+  // Fetch notification sound settings (scoped to user ID)
+  const { data: notificationSoundSettings } = useQuery<{
+    userId: string;
+    notificationSoundEnabled: boolean;
+    notificationSoundType: string;
+    notificationVolume: number;
+  }>({
+    queryKey: ['/api/users/notification-sound', user?.id],
+    enabled: !!user,
+  });
+
   // Local state for privacy settings
   const [profileVisibility, setProfileVisibility] = useState<string>("everyone");
   const [locationPrivacy, setLocationPrivacy] = useState<string>("city");
   const [lastSeenVisibility, setLastSeenVisibility] = useState<string>("everyone");
   const [onlineStatusVisibility, setOnlineStatusVisibility] = useState<boolean>(true);
+  
+  // Local state for notification sound settings
+  const [notificationSoundEnabled, setNotificationSoundEnabled] = useState<boolean>(true);
+  const [notificationSoundType, setNotificationSoundType] = useState<NotificationSoundType>("default");
+  const [notificationVolume, setNotificationVolume] = useState<number>(70);
 
-  // Update local state when user data loads
+  // Update privacy settings state when user data loads
   useEffect(() => {
     if (user) {
       setProfileVisibility(user.profileVisibility || "everyone");
@@ -35,6 +54,16 @@ export default function PrivacySettings() {
       setOnlineStatusVisibility(user.onlineStatusVisibility ?? true);
     }
   }, [user]);
+
+  // Update notification sound settings state when data loads (with user ID validation)
+  useEffect(() => {
+    // Only hydrate if we have settings, a user, and the settings belong to the current user
+    if (notificationSoundSettings && user && notificationSoundSettings.userId === user.id) {
+      setNotificationSoundEnabled(notificationSoundSettings.notificationSoundEnabled);
+      setNotificationSoundType(notificationSoundSettings.notificationSoundType as NotificationSoundType);
+      setNotificationVolume(notificationSoundSettings.notificationVolume);
+    }
+  }, [notificationSoundSettings, user]);
 
   // Save privacy settings mutation
   const saveSettingsMutation = useMutation({
@@ -66,13 +95,114 @@ export default function PrivacySettings() {
     },
   });
 
-  const handleSave = () => {
-    saveSettingsMutation.mutate({
-      profileVisibility,
-      locationPrivacy,
-      lastSeenVisibility,
-      onlineStatusVisibility,
-    });
+  // Save notification sound settings mutation
+  const saveNotificationSoundMutation = useMutation({
+    mutationFn: async (settings: {
+      notificationSoundEnabled: boolean;
+      notificationSoundType: NotificationSoundType;
+      notificationVolume: number;
+    }) => {
+      const response = await apiRequest("PUT", "/api/users/notification-sound", settings);
+      if (!response.ok) {
+        throw new Error("Failed to update notification sound settings");
+      }
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      // Validate the response belongs to the current user before applying
+      if (user && data.userId === user.id) {
+        // Invalidate the cache to refresh settings across all pages (user-scoped)
+        queryClient.invalidateQueries({ queryKey: ['/api/users/notification-sound', user.id] });
+        
+        // Hydrate the notification sound manager with validated settings
+        notificationSoundManager.hydrate({
+          enabled: data.notificationSoundEnabled,
+          soundType: data.notificationSoundType,
+          volume: data.notificationVolume,
+        });
+        toast({
+          title: "Notification sound settings updated",
+          description: "Your sound preferences have been saved successfully",
+        });
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update notification sound settings. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSave = async () => {
+    // Save settings sequentially to avoid loading state issues
+    try {
+      await saveSettingsMutation.mutateAsync({
+        profileVisibility,
+        locationPrivacy,
+        lastSeenVisibility,
+        onlineStatusVisibility,
+      });
+      
+      // Save server values for rollback on failure (with user ID validation)
+      const serverSettings = (notificationSoundSettings && user && notificationSoundSettings.userId === user.id) 
+        ? notificationSoundSettings 
+        : {
+            userId: user?.id || '',
+            notificationSoundEnabled: true,
+            notificationSoundType: 'default',
+            notificationVolume: 70,
+          };
+      
+      // Optimistically prime local settings (UI only - doesn't enable SSE playback)
+      if (user && serverSettings.userId === user.id) {
+        notificationSoundManager.primeLocal({
+          enabled: notificationSoundEnabled,
+          soundType: notificationSoundType,
+          volume: notificationVolume,
+        });
+      }
+      
+      try {
+        await saveNotificationSoundMutation.mutateAsync({
+          notificationSoundEnabled,
+          notificationSoundType,
+          notificationVolume,
+        });
+        // Note: mutation onSuccess will call hydrate() with validated server response
+      } catch (error) {
+        // Rollback by priming local settings back to server values
+        // Don't hydrate since the mutation failed - let the fetch handle hydration
+        if (user && serverSettings.userId === user.id) {
+          notificationSoundManager.primeLocal({
+            enabled: serverSettings.notificationSoundEnabled,
+            soundType: serverSettings.notificationSoundType as any,
+            volume: serverSettings.notificationVolume,
+          });
+          
+          // Revert React state to server values to prevent UI desynchronization
+          setNotificationSoundEnabled(serverSettings.notificationSoundEnabled);
+          setNotificationSoundType(serverSettings.notificationSoundType as NotificationSoundType);
+          setNotificationVolume(serverSettings.notificationVolume);
+        }
+        
+        throw error; // Re-throw to be caught by outer catch
+      }
+      
+      // Show success toast only after both complete
+      toast({
+        title: "All settings saved",
+        description: "Your privacy and notification preferences have been updated",
+      });
+    } catch (error) {
+      // Individual mutations already showed error toasts
+    }
+  };
+
+  const handleTestSound = () => {
+    // Test sound directly - bypasses enabled check without mutating settings
+    notificationSoundManager.testSound(notificationSoundType, notificationVolume);
   };
 
   if (isLoading) {
@@ -285,15 +415,93 @@ export default function PrivacySettings() {
           </CardContent>
         </Card>
 
+        {/* Notification Sounds */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Volume2 className="h-5 w-5" />
+              Notification Sounds
+            </CardTitle>
+            <CardDescription>
+              Configure sounds for incoming messages
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Enable/Disable Toggle */}
+            <div className="flex items-center justify-between p-3 rounded-lg hover-elevate">
+              <div>
+                <div className="font-medium">Enable Notification Sounds</div>
+                <div className="text-sm text-muted-foreground">
+                  Play sound when messages arrive
+                </div>
+              </div>
+              <Switch
+                checked={notificationSoundEnabled}
+                onCheckedChange={setNotificationSoundEnabled}
+                data-testid="switch-notification-sound"
+              />
+            </div>
+
+            {/* Sound Type Selection */}
+            {notificationSoundEnabled && (
+              <>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Sound Type</Label>
+                  <RadioGroup
+                    value={notificationSoundType}
+                    onValueChange={(value) => setNotificationSoundType(value as NotificationSoundType)}
+                    data-testid="radio-sound-type"
+                  >
+                    {notificationSoundManager.getAvailableSounds().map((sound) => (
+                      <div key={sound.value} className="flex items-center space-x-2 p-3 rounded-lg hover-elevate">
+                        <RadioGroupItem value={sound.value} id={`sound-${sound.value}`} />
+                        <Label htmlFor={`sound-${sound.value}`} className="flex-1 cursor-pointer font-normal">
+                          {sound.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
+
+                {/* Volume Control */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">Volume</Label>
+                    <span className="text-sm text-muted-foreground">{notificationVolume}%</span>
+                  </div>
+                  <Slider
+                    value={[notificationVolume]}
+                    onValueChange={([value]) => setNotificationVolume(value)}
+                    min={0}
+                    max={100}
+                    step={5}
+                    data-testid="slider-volume"
+                  />
+                </div>
+
+                {/* Test Button */}
+                <Button
+                  variant="outline"
+                  onClick={handleTestSound}
+                  className="w-full"
+                  data-testid="button-test-sound"
+                >
+                  Test Sound
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Save Button */}
         <div className="flex gap-3">
           <Button
             onClick={handleSave}
-            disabled={saveSettingsMutation.isPending}
+            disabled={saveSettingsMutation.isPending || saveNotificationSoundMutation.isPending}
             className="flex-1"
             data-testid="button-save-privacy"
           >
-            {saveSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+            {(saveSettingsMutation.isPending || saveNotificationSoundMutation.isPending) ? "Saving..." : "Save Changes"}
           </Button>
           <Button
             variant="outline"

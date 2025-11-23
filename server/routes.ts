@@ -333,6 +333,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Notification sound settings validation schema
+  const updateNotificationSoundSchema = z.object({
+    notificationSoundEnabled: z.boolean().optional(),
+    notificationSoundType: z.enum(["default", "chime", "bell", "pop", "swoosh"]).optional(),
+    notificationVolume: z.number().min(0).max(100).optional(),
+  });
+
+  // Get notification sound settings
+  app.get('/api/users/notification-sound', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({
+        userId: userId,
+        notificationSoundEnabled: user.notificationSoundEnabled ?? true,
+        notificationSoundType: user.notificationSoundType ?? 'default',
+        notificationVolume: user.notificationVolume ?? 70,
+      });
+    } catch (error) {
+      console.error("Error fetching notification sound settings:", error);
+      res.status(500).json({ message: "Failed to fetch notification sound settings" });
+    }
+  });
+
+  // Update notification sound settings
+  app.put('/api/users/notification-sound', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      // Validate request body
+      const validationResult = updateNotificationSoundSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid notification sound settings", 
+          errors: validationResult.error.errors 
+        });
+      }
+
+      const { notificationSoundEnabled, notificationSoundType, notificationVolume } = validationResult.data;
+
+      const updates: any = {};
+      if (notificationSoundEnabled !== undefined) updates.notificationSoundEnabled = notificationSoundEnabled;
+      if (notificationSoundType) updates.notificationSoundType = notificationSoundType;
+      if (notificationVolume !== undefined) updates.notificationVolume = notificationVolume;
+
+      const updatedUser = await storage.updateUser(userId, updates);
+      
+      res.json({
+        userId: userId,
+        notificationSoundEnabled: updatedUser.notificationSoundEnabled,
+        notificationSoundType: updatedUser.notificationSoundType,
+        notificationVolume: updatedUser.notificationVolume,
+      });
+    } catch (error) {
+      console.error("Error updating notification sound settings:", error);
+      res.status(500).json({ message: "Failed to update notification sound settings" });
+    }
+  });
+
   // Get photo upload URL with objectKey
   app.post('/api/photos/upload-url', isAuthenticated, async (req: any, res) => {
     try {
