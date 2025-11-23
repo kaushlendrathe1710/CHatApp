@@ -101,14 +101,24 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
   if (type === 'video') {
     return (
       <div className="w-full max-w-full" data-testid="preview-video">
-        <video
-          src={fileUrl}
-          controls
-          className="rounded-lg w-full max-w-full h-auto max-h-[400px] object-contain"
-          data-testid="video-message-attachment"
+        <div 
+          onClick={(e) => e.stopPropagation()} 
+          onMouseDown={(e) => e.stopPropagation()}
+          className="w-full"
         >
-          Your browser does not support the video tag.
-        </video>
+          <video
+            src={fileUrl}
+            controls
+            controlsList="nodownload"
+            preload="metadata"
+            playsInline
+            className="rounded-lg w-full max-w-full h-auto max-h-[400px] object-contain bg-black"
+            data-testid="video-message-attachment"
+            style={{ pointerEvents: 'auto' }}
+          >
+            Your browser does not support the video tag.
+          </video>
+        </div>
         {fileSize && (
           <p className="text-xs text-muted-foreground mt-1" data-testid="text-video-size">
             {formatFileSize(fileSize)}
