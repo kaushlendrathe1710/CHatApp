@@ -56,7 +56,7 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
           <img
             src={fileUrl}
             alt={fileName}
-            className="rounded-lg w-full max-w-full h-auto cursor-pointer hover-elevate"
+            className="rounded-lg w-full max-w-full h-auto max-h-[400px] object-contain cursor-pointer hover-elevate"
             onClick={() => setShowFullImage(true)}
             data-testid="img-message-attachment"
           />
@@ -104,7 +104,7 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
         <video
           src={fileUrl}
           controls
-          className="rounded-lg w-full max-w-full h-auto"
+          className="rounded-lg w-full max-w-full h-auto max-h-[400px] object-contain"
           data-testid="video-message-attachment"
         >
           Your browser does not support the video tag.
