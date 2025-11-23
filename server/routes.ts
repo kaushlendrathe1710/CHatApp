@@ -206,7 +206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     // SECURITY: Validate user has access to ALL requested conversations
-    const userConversations = await storage.getConversationsForUser(userId);
+    const userConversations = await storage.getUserConversations(userId);
     const userConvIds = new Set(userConversations.map(c => c.id));
     
     const authorizedIds = conversationIds.filter((id: string) => userConvIds.has(id));

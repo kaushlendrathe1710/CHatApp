@@ -190,7 +190,8 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     return () => {
       disconnect();
     };
-  }, [connect, disconnect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only connect once on mount
 
   useEffect(() => {
     // Always subscribe (even with empty array) to clear revoked subscriptions
