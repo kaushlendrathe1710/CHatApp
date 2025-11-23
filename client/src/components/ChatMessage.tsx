@@ -308,7 +308,7 @@ function ChatMessageComponent({
       )}
       {!isSelectionMode && showAvatar && isOwn && <div className="h-8 w-8 flex-shrink-0" />}
       
-      <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[65%] gap-1`}>
+      <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[65%] md:max-w-[50%] min-w-0 gap-1`}>
         {isGroup && !isOwn && showAvatar && (
           <span className="text-xs font-medium px-3 text-muted-foreground" data-testid="text-sender-name">
             {senderName}
@@ -318,7 +318,7 @@ function ChatMessageComponent({
         {/* Wrap message bubble and action menu in group for hover */}
         <div className="group relative flex items-start gap-1">
           <div
-            className={`rounded-2xl px-3 py-2 ${
+            className={`rounded-2xl px-3 py-2 min-w-0 break-words ${
               isOwn
                 ? 'bg-primary text-primary-foreground rounded-br-sm'
                 : 'bg-card border border-card-border rounded-bl-sm'
