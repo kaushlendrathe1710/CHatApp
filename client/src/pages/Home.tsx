@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -139,6 +139,12 @@ export default function Home() {
       enabled: !!user,
     });
 
+  // Memoize conversation IDs to prevent infinite subscribe loop
+  const conversationIds = useMemo(
+    () => conversations?.map((c) => c.id) || [],
+    [conversations]
+  );
+
   // WebSocket connection with error handling
   const { sendMessage: sendWsMessage, isConnected: wsConnected } = useWebSocket(
     (message) => {
@@ -244,7 +250,7 @@ export default function Home() {
         console.error("Error handling WebSocket message:", error);
       }
     },
-    conversations?.map((c) => c.id) || [],
+    conversationIds,
     user?.id
   );
 

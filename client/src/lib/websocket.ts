@@ -196,9 +196,18 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
   useEffect(() => {
     // Always subscribe (even with empty array) to clear revoked subscriptions
     if (eventSourceRef.current && eventSourceRef.current.readyState === EventSource.OPEN && conversationIds !== undefined && clientIdRef.current) {
-      subscribe(conversationIds);
+      // Guard: Only subscribe if the conversation IDs have actually changed (use Set comparison for stable identity)
+      const currentSet = new Set(conversationIds);
+      const previousSet = subscribedConversationsRef.current;
+      
+      // Check if the sets are different (size or content)
+      if (currentSet.size !== previousSet.size || 
+          !Array.from(currentSet).every(id => previousSet.has(id))) {
+        subscribe(conversationIds);
+      }
     }
-  }, [conversationIds, subscribe]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationIds]); // Only re-subscribe when conversationIds change, not when subscribe changes
 
   return { 
     sendMessage, 
