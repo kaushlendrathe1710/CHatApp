@@ -100,11 +100,14 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
   // Video preview
   if (type === 'video') {
     return (
-      <div className="w-full max-w-full" data-testid="preview-video">
+      <div className="w-full max-w-full overflow-visible" data-testid="preview-video">
         <div 
           onClick={(e) => e.stopPropagation()} 
           onMouseDown={(e) => e.stopPropagation()}
-          className="w-full"
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          className="w-full relative z-10"
+          style={{ isolation: 'isolate' }}
         >
           <video
             src={fileUrl}
@@ -114,7 +117,7 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
             playsInline
             className="rounded-lg w-full max-w-full h-auto max-h-[400px] object-contain bg-black"
             data-testid="video-message-attachment"
-            style={{ pointerEvents: 'auto' }}
+            style={{ pointerEvents: 'auto', touchAction: 'auto' }}
           >
             Your browser does not support the video tag.
           </video>

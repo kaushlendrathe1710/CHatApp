@@ -355,9 +355,9 @@ function ChatMessageComponent({
         )}
         
         {/* Wrap message bubble and action menu in group for hover */}
-        <div className="group relative flex items-start gap-1 max-w-full">
+        <div className="group relative flex items-start gap-1 max-w-full overflow-visible">
           <div
-            className={`rounded-2xl px-3 py-2 min-w-0 max-w-full break-words ${
+            className={`rounded-2xl px-3 py-2 min-w-0 max-w-full break-words overflow-visible ${
               isOwn
                 ? 'bg-primary text-primary-foreground rounded-br-sm'
                 : 'bg-card border border-card-border rounded-bl-sm'
