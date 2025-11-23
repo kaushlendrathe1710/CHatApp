@@ -1187,7 +1187,6 @@ export default function Home() {
                       <>
                         <button
                           onClick={handleOpenUserDetails}
-                          disabled={!isDirectMessage}
                           className={`flex items-center gap-3 flex-1 min-w-0 ${
                             isDirectMessage ? 'hover-elevate active-elevate-2 rounded-md p-1 -ml-1' : ''
                           }`}
