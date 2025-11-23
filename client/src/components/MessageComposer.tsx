@@ -440,32 +440,32 @@ export const MessageComposer = React.memo(function MessageComposer({
     <div className="border-t bg-background p-4">
       {replyToMessage && (
         <div
-          className="mb-2 flex items-start gap-2 bg-accent/50 border-l-4 border-l-primary p-3 rounded-md cursor-pointer hover-elevate transition-colors"
+          className="mb-2 flex items-start gap-2 bg-accent/50 border-l-4 border-l-primary p-3 rounded-md cursor-pointer hover-elevate transition-colors overflow-hidden"
           onClick={onJumpToReply}
           data-testid="reply-preview"
         >
           <Reply className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <p className="text-xs font-medium text-primary">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="flex items-center gap-2 mb-1 overflow-hidden">
+              <p className="text-xs font-medium text-primary truncate">
                 {replyToMessage.sender.fullName || replyToMessage.sender.email?.split('@')[0] || 'User'}
               </p>
               {replyToMessage.type === 'image' && (
-                <ImageIcon className="h-3 w-3 text-muted-foreground" />
+                <ImageIcon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
               )}
               {replyToMessage.type === 'file' && (
-                <FileText className="h-3 w-3 text-muted-foreground" />
+                <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
               )}
             </div>
-            <p className="text-sm text-muted-foreground truncate">
+            <p className="text-sm text-muted-foreground truncate overflow-hidden">
               {replyToMessage.type === 'image' ? (
                 <span className="flex items-center gap-1">
-                  <ImageIcon className="h-3.5 w-3.5" />
+                  <ImageIcon className="h-3.5 w-3.5 flex-shrink-0" />
                   Photo
                 </span>
               ) : replyToMessage.type === 'file' ? (
                 <span className="flex items-center gap-1">
-                  <FileText className="h-3.5 w-3.5" />
+                  <FileText className="h-3.5 w-3.5 flex-shrink-0" />
                   {replyToMessage.fileName || 'File'}
                 </span>
               ) : (
