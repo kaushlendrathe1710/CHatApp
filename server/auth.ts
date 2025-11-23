@@ -223,6 +223,7 @@ export function setupAuth(app: Express) {
         mobileNumber: user.mobileNumber,
         profileImageUrl: user.profileImageUrl,
         status: user.status,
+        role: user.role,
         lastSeen: user.lastSeen,
         isRegistered: user.isRegistered,
       });
