@@ -440,13 +440,13 @@ export const MessageComposer = React.memo(function MessageComposer({
     <div className="border-t bg-background p-4">
       {replyToMessage && (
         <div
-          className="mb-2 flex items-start gap-2 bg-accent/50 border-l-4 border-l-primary p-3 rounded-md cursor-pointer hover-elevate transition-colors overflow-hidden"
+          className="mb-2 flex items-start gap-2 bg-accent/50 border-l-4 border-l-primary p-3 rounded-md cursor-pointer hover-elevate transition-colors"
           onClick={onJumpToReply}
           data-testid="reply-preview"
         >
           <Reply className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <div className="flex items-center gap-2 mb-1 overflow-hidden">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
               <p className="text-xs font-medium text-primary truncate">
                 {replyToMessage.sender.fullName || replyToMessage.sender.email?.split('@')[0] || 'User'}
               </p>
@@ -457,7 +457,7 @@ export const MessageComposer = React.memo(function MessageComposer({
                 <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
               )}
             </div>
-            <p className="text-sm text-muted-foreground truncate overflow-hidden">
+            <p className="text-sm text-muted-foreground truncate">
               {replyToMessage.type === 'image' ? (
                 <span className="flex items-center gap-1">
                   <ImageIcon className="h-3.5 w-3.5 flex-shrink-0" />

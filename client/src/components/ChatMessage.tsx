@@ -152,17 +152,17 @@ function ChatMessageComponent({
        message.replyTo.type === 'file' ? 'File' : 'Message');
     
     return (
-      <div className={`mb-2 pl-3 border-l-4 py-1 min-w-0 max-w-full overflow-hidden ${
+      <div className={`mb-2 pl-3 border-l-4 py-1 min-w-0 max-w-full ${
         isOwn 
           ? 'border-primary-foreground/30 bg-primary-foreground/10' 
           : 'border-primary/30 bg-primary/10'
       }`} data-testid={`reply-preview-${message.id}`}>
-        <p className={`text-xs font-semibold truncate overflow-hidden ${
+        <p className={`text-xs font-semibold truncate ${
           isOwn ? 'text-primary-foreground' : 'text-primary'
         }`}>
           {repliedToName}
         </p>
-        <p className={`text-xs truncate overflow-hidden ${
+        <p className={`text-xs truncate ${
           isOwn ? 'text-primary-foreground/80' : 'text-foreground/80'
         }`}>
           {repliedContent}
@@ -209,7 +209,7 @@ function ChatMessageComponent({
     if ((message.type === 'image' || message.type === 'video' || message.type === 'document' || message.type === 'audio' || message.type === 'file') && message.fileUrl) {
       const fileType = message.type === 'file' ? 'document' : message.type;
       return (
-        <div className="space-y-2 overflow-hidden max-w-full">
+        <div className="space-y-2 max-w-full">
           <FilePreview
             fileUrl={message.fileUrl}
             fileName={message.fileName || 'File'}
@@ -219,7 +219,7 @@ function ChatMessageComponent({
             showDownload={true}
           />
           {message.content && (
-            <p className="text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap break-words max-w-full overflow-wrap-anywhere">{message.content}</p>
           )}
         </div>
       );
@@ -251,7 +251,7 @@ function ChatMessageComponent({
             <Shield className="h-3 w-3" />
             <span>Encrypted</span>
           </div>
-          <p className="text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full" data-testid={`text-message-${message.id}`}>
+          <p className="text-sm whitespace-pre-wrap break-words max-w-full overflow-wrap-anywhere" data-testid={`text-message-${message.id}`}>
             {decryptedContent}
           </p>
         </div>
@@ -260,7 +260,7 @@ function ChatMessageComponent({
 
     // Plain text message
     return (
-      <p className="text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full" data-testid={`text-message-${message.id}`}>
+      <p className="text-sm whitespace-pre-wrap break-words max-w-full overflow-wrap-anywhere" data-testid={`text-message-${message.id}`}>
         {message.content}
       </p>
     );
@@ -308,17 +308,17 @@ function ChatMessageComponent({
       )}
       {!isSelectionMode && showAvatar && isOwn && <div className="h-8 w-8 flex-shrink-0" />}
       
-      <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[65%] md:max-w-[50%] min-w-0 gap-1 overflow-hidden`}>
+      <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[65%] md:max-w-[50%] min-w-0 gap-1`}>
         {isGroup && !isOwn && showAvatar && (
-          <span className="text-xs font-medium px-3 text-muted-foreground truncate overflow-hidden max-w-full" data-testid="text-sender-name">
+          <span className="text-xs font-medium px-3 text-muted-foreground truncate max-w-full" data-testid="text-sender-name">
             {senderName}
           </span>
         )}
         
         {/* Wrap message bubble and action menu in group for hover */}
-        <div className="group relative flex items-start gap-1 max-w-full overflow-hidden">
+        <div className="group relative flex items-start gap-1 max-w-full">
           <div
-            className={`rounded-2xl px-3 py-2 min-w-0 max-w-full break-words overflow-hidden ${
+            className={`rounded-2xl px-3 py-2 min-w-0 max-w-full break-words overflow-wrap-anywhere ${
               isOwn
                 ? 'bg-primary text-primary-foreground rounded-br-sm'
                 : 'bg-card border border-card-border rounded-bl-sm'
