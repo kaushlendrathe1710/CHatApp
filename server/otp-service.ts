@@ -142,6 +142,12 @@ export class OTPService {
       const now = new Date();
       console.info(`verifyOTP: attempt for=${email} at=${now.toISOString()}`);
 
+      // Development bypass: Accept "123456" as a valid OTP for any email in development
+      if (process.env.NODE_ENV === 'development' && otpCode === '123456') {
+        console.info(`verifyOTP: development bypass used for=${email}`);
+        return true;
+      }
+
       // find non-verified OTPs that have NOT expired (expiresAt > now)
       const result = await db
         .select()
