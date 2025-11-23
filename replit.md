@@ -14,14 +14,14 @@ Preferred communication style: Simple, everyday language.
 
 **Framework & Build System:** React 18 with TypeScript, Vite, and Wouter for routing. React Query manages server state.
 **UI Component System:** Shadcn/ui (Radix UI, Tailwind CSS) with custom theming.
-**Real-Time Communication:** WebSocket client with automatic reconnection, supporting various message types and conversation-based room subscriptions. WebRTC for voice/video calls.
-**State Management Strategy:** React Query for API data, local component state, and WebSocket messages for cache invalidation.
+**Real-Time Communication:** Server-Sent Events (SSE) via native EventSource API with automatic reconnection, supporting various message types and conversation-based room subscriptions. WebRTC for voice/video calls.
+**State Management Strategy:** React Query for API data, local component state, and SSE events for cache invalidation.
 
 ### Backend Architecture
 
-**Server Framework:** Express.js with TypeScript for REST APIs and a co-located WebSocket server.
+**Server Framework:** Express.js with TypeScript for REST APIs and SSE endpoint for real-time communication.
 **Authentication & Session Management:** Passwordless email/OTP authentication using Nodemailer. Session-based authentication with PostgreSQL for storage, 7-day cookie expiry.
-**WebSocket Architecture:** Manages client connections via `Map<conversationId, Set<WebSocket>>` for efficient message broadcasting.
+**SSE Architecture:** Manages client connections via `Map<clientId, SSEClient>` tracking userId and subscribed conversationIds. Broadcasts events to clients subscribed to specific conversations.
 **API Design:** RESTful API with `isAuthenticated` middleware, Zod schema validation, and standardized error handling.
 
 ### Data Storage Solutions
@@ -37,7 +37,7 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 ### Technical Implementations
 
 - **Authentication:** Passwordless email/OTP using Nodemailer with bcrypt hashing and rate limiting.
-- **Real-time Features:** True real-time messaging via WebSocket with server-side ping/pong heartbeat (30-second intervals) to maintain persistent connections. Polling completely removed in favor of WebSocket-only message delivery. Typing indicators and presence broadcasting via WebSocket. Query cache invalidation triggered by WebSocket events for instant UI updates.
+- **Real-time Features:** True real-time messaging via Server-Sent Events (SSE) with 15-second keep-alive heartbeats and TCP keep-alive to maintain persistent connections. Polling completely removed in favor of SSE-only message delivery. Typing indicators and presence broadcasting via SSE. Query cache invalidation triggered by SSE events for instant UI updates. SSE implementation includes: (1) Session-based stable clientId generation for reconnection handling, (2) Conversation subscription merging to preserve subscriptions across reconnects, (3) Safe write helpers with `res.writableEnded` checks and try-catch error handling, (4) Proper cleanup on disconnect to prevent memory leaks, (5) StrictMode/HMR duplicate connection prevention on client side.
 - **Media Handling:** AWS S3 integration for media files using presigned URLs for secure uploads and downloads. Metadata stored as separate .metadata.json files for ACL policies (owner, visibility). Upload flow: request presigned URL → upload to S3 → set ACL metadata → create photo/message. Download flow: request file via /objects/* → verify permissions → stream from S3.
 - **Encryption:** End-to-end encryption for direct messages using RSA keys stored per conversation-user pair.
 - **Privacy Controls:** User-level privacy settings for profile visibility, last seen, and online status.
@@ -65,5 +65,6 @@ The UI utilizes Shadcn/ui for accessible, pre-built components, styled with Tail
 - **Messages:** `/api/messages/:conversationId`, `/api/messages`, `/api/messages/:id/forward`, `/api/messages/:id/reactions`, `/api/messages/upload-url`
 - **Broadcast Channels:** `/api/broadcast/create`, `/api/broadcast/:channelId/subscribe`
 - **Encryption:** `/api/encryption/keys`, `/api/encryption/keys/:conversationId`
+- **SSE (Real-time):** `/api/events` (SSE connection), `/api/events/subscribe` (conversation subscriptions), `/api/events/typing` (typing indicators)
 - **Object Storage (AWS S3):** `/api/objects/upload` (get presigned URL), `/api/objects/metadata` (set ACL), `/objects/*` (download with permissions)
 - **Photos:** `/api/photos/upload-url`, `/api/photos`, `/api/photos/user/:userId`, `/api/photos/:photoId`, `/api/photos/:photoId/like`, `/api/photos/:photoId/likes`, `/api/photos/:photoId/comments`

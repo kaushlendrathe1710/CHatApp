@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { apiRequest } from './queryClient';
 
 export type WebSocketMessage = {
   type: 'message' | 'typing' | 'presence' | 'status_update' | 'join_conversations' | 'reaction_added' | 'message_edited' | 'message_deleted' | 'settings_updated';
@@ -6,11 +7,12 @@ export type WebSocketMessage = {
 };
 
 export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, conversationIds?: string[], userId?: string) {
-  const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
-  const isConnectingRef = useRef(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const clientIdRef = useRef<string | null>(null);
   const conversationIdsRef = useRef(conversationIds);
   const userIdRef = useRef(userId);
+  const isConnectingRef = useRef(false);
+  const subscribedConversationsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     conversationIdsRef.current = conversationIds;
@@ -20,89 +22,166 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     userIdRef.current = userId;
   }, [userId]);
 
+  const subscribe = useCallback((convIds: string[]) => {
+    if (!clientIdRef.current) {
+      return Promise.resolve();
+    }
+
+    // Treat convIds as the AUTHORITATIVE list (replace, don't accumulate)
+    // This ensures subscriptions are removed when access is revoked
+    // IMPORTANT: Allow empty arrays to clear subscriptions on revocation
+    subscribedConversationsRef.current = new Set(convIds);
+    
+    return apiRequest('POST', '/api/events/subscribe', {
+      clientId: clientIdRef.current,  // Fixed: include key name
+      conversationIds: convIds  // Send authoritative list (even if empty)
+    }).then(() => {
+      console.log('[SSE] Subscribed to', convIds.length, 'conversations');
+    }).catch(err => {
+      console.error('[SSE] Subscribe error:', err);
+    });
+  }, []);
+
   const connect = useCallback(() => {
-    if (isConnectingRef.current || (socketRef.current && socketRef.current.readyState === WebSocket.OPEN)) {
+    if (eventSourceRef.current) {
+      const state = eventSourceRef.current.readyState;
+      if (state === EventSource.CONNECTING || state === EventSource.OPEN) {
+        console.log('[SSE] Already connected or connecting, skipping');
+        return;
+      }
+    }
+
+    if (isConnectingRef.current) {
+      console.log('[SSE] Connection already in progress, skipping');
       return;
     }
 
     isConnectingRef.current = true;
+    console.log('[SSE] Connecting...');
     
-    // Construct WebSocket URL with dedicated /ws path
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
-    
-    console.log('[WebSocket] Connecting to:', wsUrl);
-    
-    let socket: WebSocket;
-    try {
-      socket = new WebSocket(wsUrl);
-    } catch (error) {
-      console.error('[WebSocket] Failed to create WebSocket:', error);
-      isConnectingRef.current = false;
-      return;
-    }
+    const eventSource = new EventSource('/api/events');
 
-    socket.onopen = () => {
-      console.log('[WebSocket] Connected successfully');
+    eventSource.addEventListener('connected', (e) => {
+      const data = JSON.parse(e.data);
+      clientIdRef.current = data.clientId;
       isConnectingRef.current = false;
+      console.log('[SSE] Connected successfully, clientId:', data.clientId);
       
-      // Join conversations after connecting
-      if (conversationIdsRef.current && conversationIdsRef.current.length > 0) {
-        socket.send(JSON.stringify({
-          type: 'join_conversations',
-          data: { 
-            conversationIds: conversationIdsRef.current,
-            userId: userIdRef.current
-          }
-        }));
+      setTimeout(() => {
+        // Always subscribe (even with empty array) to clear revoked subscriptions
+        if (conversationIdsRef.current !== undefined) {
+          subscribe(conversationIdsRef.current);
+        }
+      }, 100);
+    });
+
+    eventSource.addEventListener('message', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'message', data });
       }
-    };
+    });
 
-    socket.onmessage = (event) => {
-      try {
-        const message: WebSocketMessage = JSON.parse(event.data);
-        onMessage?.(message);
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+    eventSource.addEventListener('typing', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'typing', data });
       }
-    };
+    });
 
-    socket.onerror = (error) => {
-      console.error('[WebSocket] Error:', error);
+    eventSource.addEventListener('presence', (e) => {
+      const data = JSON.parse(e.data);
+      console.log('[SSE] Received presence:', data);
+      if (onMessage) {
+        onMessage({ type: 'presence', data });
+      }
+    });
+
+    eventSource.addEventListener('status_update', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'status_update', data });
+      }
+    });
+
+    eventSource.addEventListener('reaction_added', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'reaction_added', data });
+      }
+    });
+
+    eventSource.addEventListener('message_edited', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'message_edited', data });
+      }
+    });
+
+    eventSource.addEventListener('message_deleted', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'message_deleted', data });
+      }
+    });
+
+    eventSource.addEventListener('settings_updated', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'settings_updated', data });
+      }
+    });
+
+    eventSource.addEventListener('call_signal', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'message', data: { type: 'call_signal', ...data } });
+      }
+    });
+
+    eventSource.addEventListener('call_initiate', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'message', data: { type: 'call_initiate', ...data } });
+      }
+    });
+
+    eventSource.addEventListener('call_end', (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: 'message', data: { type: 'call_end', ...data } });
+      }
+    });
+
+    eventSource.addEventListener('ping', () => {
+      // Server heartbeat
+    });
+
+    eventSource.onerror = () => {
+      console.error('[SSE] Connection error, will auto-reconnect');
       isConnectingRef.current = false;
+      // DON'T clear subscriptions - we need to re-send the full list on reconnect
+      // subscribedConversationsRef.current.clear();
+      clientIdRef.current = null;
     };
 
-    socket.onclose = (event) => {
-      console.log('[WebSocket] Disconnected:', {
-        code: event.code,
-        reason: event.reason,
-        wasClean: event.wasClean,
-      });
-      isConnectingRef.current = false;
-      socketRef.current = null;
-      
-      // Reconnect after 3 seconds
-      reconnectTimeoutRef.current = setTimeout(() => {
-        connect();
-      }, 3000);
-    };
-
-    socketRef.current = socket;
-  }, [onMessage]);
+    eventSourceRef.current = eventSource;
+  }, [onMessage, subscribe]);
 
   const sendMessage = useCallback((message: WebSocketMessage) => {
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify(message));
+    if (message.type === 'typing') {
+      apiRequest('POST', '/api/events/typing', message.data).catch(err => console.error('[SSE] Typing error:', err));
     }
   }, []);
 
   const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+      clientIdRef.current = null;
+      isConnectingRef.current = false;
+      // DON'T clear subscriptions - preserve across component lifecycle
+      // subscribedConversationsRef.current.clear();
     }
   }, []);
 
@@ -113,18 +192,16 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     };
   }, [connect, disconnect]);
 
-  // Re-join conversations when they change
   useEffect(() => {
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && conversationIds && conversationIds.length > 0) {
-      socketRef.current.send(JSON.stringify({
-        type: 'join_conversations',
-        data: { 
-          conversationIds,
-          userId: userIdRef.current
-        }
-      }));
+    // Always subscribe (even with empty array) to clear revoked subscriptions
+    if (eventSourceRef.current && eventSourceRef.current.readyState === EventSource.OPEN && conversationIds !== undefined && clientIdRef.current) {
+      subscribe(conversationIds);
     }
-  }, [conversationIds]);
+  }, [conversationIds, subscribe]);
 
-  return { sendMessage, disconnect, isConnected: socketRef.current?.readyState === WebSocket.OPEN };
+  return { 
+    sendMessage, 
+    disconnect, 
+    isConnected: eventSourceRef.current?.readyState === EventSource.OPEN 
+  };
 }

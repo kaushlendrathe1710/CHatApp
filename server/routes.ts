@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { WebSocketServer, WebSocket } from "ws";
+import { Server as SocketIOServer, Socket } from "socket.io";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
 import session from "express-session";
@@ -9,44 +9,64 @@ import { S3StorageService, ObjectNotFoundError, ObjectPermission } from "./s3Sto
 import { insertConversationSchema, insertMessageSchema, createGroupSchema, addParticipantSchema, updateParticipantRoleSchema } from "@shared/schema";
 import { z } from "zod";
 
-// WebSocket client tracking
-const wsClients = new Map<string, Set<WebSocket>>();
-const wsUserMap = new Map<WebSocket, string>(); // Maps WebSocket to userId
-
-// Helper function to broadcast presence updates to all active conversations
-function broadcastPresenceUpdate() {
-  const onlineUserIds = Array.from(new Set(wsUserMap.values()));
-  
-  // Collect unique WebSocket clients to avoid sending duplicates
-  const uniqueClients = new Set<WebSocket>();
-  wsClients.forEach((clients) => {
-    clients.forEach(client => uniqueClients.add(client));
-  });
-  
-  // Send presence update to each unique client only once
-  const presenceMessage = JSON.stringify({
-    type: 'presence',
-    data: { onlineUserIds },
-  });
-  
-  uniqueClients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(presenceMessage);
-    }
-  });
+// SSE (Server-Sent Events) client tracking
+interface SSEClient {
+  response: Response;
+  userId: string;
+  conversationIds: string[];
+  lastPing: number;
 }
 
-export function broadcastToConversation(conversationId: string, message: any) {
-  const clients = wsClients.get(conversationId);
-  if (clients) {
-    const messageStr = JSON.stringify(message);
-    clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(messageStr);
-      }
-    });
+const sseClients = new Map<string, SSEClient>(); // Maps clientId to SSE client info
+
+// Helper to send SSE event
+function sendSSEEvent(clientId: string, eventType: string, data: any): boolean {
+  const client = sseClients.get(clientId);
+  if (!client || !client.response) return false;
+  
+  const res = client.response as any;
+  
+  // Check if response is still writable
+  if (res.writableEnded) {
+    console.warn(`[SSE] Attempted to write to ended stream for client ${clientId}`);
+    sseClients.delete(clientId);
+    return false;
+  }
+  
+  try {
+    res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
+    return true;
+  } catch (error) {
+    console.error(`[SSE] Error sending to client ${clientId}:`, error);
+    sseClients.delete(clientId);
+    return false;
   }
 }
+
+// Broadcast message to all clients in a conversation
+export function broadcastToConversation(conversationId: string, message: any) {
+  const { type, data } = message;
+  
+  for (const [clientId, client] of sseClients.entries()) {
+    if (client.conversationIds.includes(conversationId)) {
+      sendSSEEvent(clientId, type, data);
+    }
+  }
+}
+
+// Broadcast presence updates to all active users
+function broadcastPresenceUpdate() {
+  const onlineUserIds = Array.from(new Set(
+    Array.from(sseClients.values()).map(c => c.userId)
+  ));
+  
+  for (const [clientId] of sseClients.entries()) {
+    sendSSEEvent(clientId, 'presence', { onlineUserIds });
+  }
+}
+
+// No separate heartbeat interval needed - keep-alive comments in /api/events handler suffice
+// Stale client cleanup happens automatically via req.on('close') and error handlers
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize S3StorageService instance
@@ -78,6 +98,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Auth routes
   setupAuth(app);
+
+  // SSE endpoint for real-time events
+  app.get('/api/events', isAuthenticated, (req: any, res: any) => {
+    const userId = req.user.id;
+    const sessionId = req.sessionID || req.session?.id || userId;
+    // Generate unique per-connection clientId (prevents multi-tab collisions)
+    // Client updates its stored ID from the 'connected' event after each connection
+    const clientId = `${sessionId}_${Date.now().toString(36)}`;
+    
+    console.log(`[SSE] Client ${clientId} connecting for user ${userId}`);
+    
+    // Set headers for SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    
+    // Enable TCP keep-alive to prevent proxy/firewall timeouts
+    if (req.socket) {
+      req.socket.setKeepAlive(true, 30000);
+    }
+    
+    res.flushHeaders(); // Flush headers immediately
+    
+    // Keep-alive interval reference (declare early to avoid TDZ)
+    let keepAliveInterval: NodeJS.Timeout;
+    
+    // Cleanup function
+    const cleanup = () => {
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+      }
+      sseClients.delete(clientId);
+      broadcastPresenceUpdate();
+    };
+    
+    // Helper to safely write SSE data
+    const safeWrite = (data: string): boolean => {
+      if (res.writableEnded) {
+        return false;
+      }
+      try {
+        res.write(data);
+        return true;
+      } catch (error) {
+        console.error(`[SSE] Write error for client ${clientId}:`, error);
+        cleanup();
+        return false;
+      }
+    };
+    
+    // Send initial connection success event
+    if (!safeWrite(`event: connected\ndata: ${JSON.stringify({ clientId, userId })}\n\n`)) {
+      console.error(`[SSE] Failed to send connected event to ${clientId}`);
+      return;
+    }
+    
+    console.log(`[SSE] Client ${clientId} connected successfully`);
+    
+    // Track this client
+    sseClients.set(clientId, {
+      response: res,
+      userId,
+      conversationIds: [],
+      lastPing: Date.now()
+    });
+    
+    // Broadcast presence update (user came online)
+    broadcastPresenceUpdate();
+    
+    // Send periodic comments to keep connection alive (proxy/LB won't timeout)
+    keepAliveInterval = setInterval(() => {
+      const client = sseClients.get(clientId);
+      if (!client || !safeWrite(':\n\n')) {
+        cleanup();
+      }
+    }, 15000); // Every 15 seconds
+    
+    // Handle client disconnect
+    req.on('close', () => {
+      console.log(`[SSE] Client ${clientId} disconnected`);
+      cleanup();
+    });
+    
+    req.on('error', (error) => {
+      console.error(`[SSE] Request error for client ${clientId}:`, error);
+      cleanup();
+    });
+    
+    // Keep connection alive - don't end the response
+    // SSE connections stay open until client closes them
+  });
+
+  // Update conversation subscriptions for SSE client
+  app.post('/api/events/subscribe', isAuthenticated, async (req: any, res) => {
+    const userId = req.user.id;
+    const { clientId, conversationIds } = req.body;
+    
+    if (!clientId || !conversationIds) {
+      return res.status(400).json({ error: 'clientId and conversationIds required' });
+    }
+    
+    const client = sseClients.get(clientId);
+    if (!client || client.userId !== userId) {
+      return res.status(404).json({ error: 'Client not found or unauthorized' });
+    }
+    
+    // SECURITY: Validate user has access to ALL requested conversations
+    const userConversations = await storage.getConversationsForUser(userId);
+    const userConvIds = new Set(userConversations.map(c => c.id));
+    
+    const authorizedIds = conversationIds.filter((id: string) => userConvIds.has(id));
+    const unauthorizedIds = conversationIds.filter((id: string) => !userConvIds.has(id));
+    
+    if (unauthorizedIds.length > 0) {
+      console.warn(`[SSE] Client ${clientId} attempted unauthorized subscriptions:`, unauthorizedIds);
+    }
+    
+    // REPLACE subscriptions with authorized list (removes revoked access)
+    client.conversationIds = authorizedIds;
+    client.lastPing = Date.now();
+    
+    console.log(`[SSE] Client ${clientId} subscribed to ${authorizedIds.length} conversations`);
+    res.json({ success: true, subscribedCount: authorizedIds.length });
+  });
+
+  // Typing indicator endpoint
+  app.post('/api/events/typing', isAuthenticated, async (req: any, res) => {
+    const userId = req.user.id;
+    const { conversationId, isTyping } = req.body;
+    
+    // Broadcast typing indicator to conversation (except sender)
+    broadcastToConversation(conversationId, {
+      type: 'typing',
+      data: { conversationId, userId, isTyping }
+    });
+    
+    res.json({ success: true });
+  });
 
   // Get all users (sanitized based on privacy settings and role-based filtering)
   app.get('/api/users', isAuthenticated, async (req: any, res) => {
@@ -935,27 +1094,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
-      // Broadcast new message via WebSocket
+      // Broadcast new message via Socket.IO
       broadcastToConversation(conversationId, {
         type: 'message',
         data: { ...message, conversationId },
       });
 
-      // If there are active WebSocket clients (excluding sender) in the conversation, mark as delivered
-      const clients = wsClients.get(conversationId);
-      const hasRecipientOnline = clients && Array.from(clients).some(client => wsUserMap.get(client) !== userId);
-      
-      if (hasRecipientOnline) {
-        await storage.updateMessageStatus(message.id, 'delivered');
-        broadcastToConversation(conversationId, {
-          type: 'status_update',
-          data: {
-            conversationId,
-            messageId: message.id,
-            status: 'delivered',
-            userId,
-          },
+      // If there are active Socket.IO clients (excluding sender) in the conversation, mark as delivered
+      if (io) {
+        const socketsInRoom = await io.in(conversationId).fetchSockets();
+        const hasRecipientOnline = socketsInRoom.some(socket => {
+          const socketUserId = socketUserMap.get(socket.id);
+          return socketUserId && socketUserId !== userId;
         });
+        
+        if (hasRecipientOnline) {
+          await storage.updateMessageStatus(message.id, 'delivered');
+          broadcastToConversation(conversationId, {
+            type: 'status_update',
+            data: {
+              conversationId,
+              messageId: message.id,
+              status: 'delivered',
+              userId,
+            },
+          });
+        }
       }
 
       res.json(message);
@@ -1268,123 +1432,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
-
-  // Create WebSocket server WITHOUT attaching to http server yet
-  const wss = new WebSocketServer({ noServer: true });
-  console.log('[WebSocket] Server created (noServer mode)');
-
-  // Manually handle upgrade requests and route to correct WebSocket server
-  httpServer.on('upgrade', (request, socket, head) => {
-    const pathname = request.url || '';
-    console.log('[DIAGNOSTIC] Upgrade request for:', pathname);
-    
-    if (pathname.startsWith('/ws')) {
-      console.log('[WebSocket] Handling /ws upgrade request');
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        console.log('[WebSocket] handleUpgrade complete, emitting connection');
-        wss.emit('connection', ws, request);
-      });
-    } else {
-      // Not for our WebSocket server - let it bubble up to Vite HMR
-      console.log('[DIAGNOSTIC] Non-/ws upgrade request, passing through');
-    }
-  });
-
-  wss.on('connection', (ws: WebSocket, req: any) => {
-    console.log('[WebSocket] Client connected from:', req.socket.remoteAddress);
-    
-    let userConversations: string[] = [];
-    let isAlive = true;
-
-    // Heartbeat mechanism
-    ws.on('pong', () => {
-      isAlive = true;
-    });
-
-    const pingInterval = setInterval(() => {
-      if (!isAlive) {
-        console.log('[WebSocket] Client failed to respond to ping, terminating');
-        clearInterval(pingInterval);
-        return ws.terminate();
-      }
-      isAlive = false;
-      ws.ping();
-    }, 30000);
-
-    ws.on('message', (data: string) => {
-      try {
-        const message = JSON.parse(data.toString());
-
-        if (message.type === 'typing') {
-          broadcastToConversation(message.data.conversationId, message);
-        } else if (message.type === 'join_conversations') {
-          const newConversationIds = message.data.conversationIds || [];
-          const userId = message.data.userId;
-
-          if (userId) {
-            wsUserMap.set(ws, userId);
-          }
-
-          if (newConversationIds.length > 0 || userConversations.length > 0) {
-            const oldSet = new Set(userConversations);
-            const newSet = new Set(newConversationIds);
-
-            const toRemove = userConversations.filter((convId: string) => !newSet.has(convId));
-            const toAdd = newConversationIds.filter((convId: string) => !oldSet.has(convId));
-
-            toRemove.forEach((convId: string) => {
-              const clients = wsClients.get(convId);
-              if (clients) {
-                clients.delete(ws);
-                if (clients.size === 0) {
-                  wsClients.delete(convId);
-                }
-              }
-            });
-
-            toAdd.forEach((convId: string) => {
-              if (!wsClients.has(convId)) {
-                wsClients.set(convId, new Set());
-              }
-              wsClients.get(convId)!.add(ws);
-            });
-
-            userConversations = newConversationIds;
-          }
-
-          broadcastPresenceUpdate();
-        } else if (message.type === 'call_signal') {
-          broadcastToConversation(message.data.conversationId, message);
-        } else if (message.type === 'call_initiate') {
-          broadcastToConversation(message.data.conversationId, message);
-        } else if (message.type === 'call_end') {
-          broadcastToConversation(message.data.conversationId, message);
-        }
-      } catch (error) {
-        console.error('Error handling WebSocket message:', error);
-      }
-    });
-
-    ws.on('close', () => {
-      clearInterval(pingInterval);
-      userConversations.forEach((convId) => {
-        const clients = wsClients.get(convId);
-        if (clients) {
-          clients.delete(ws);
-          if (clients.size === 0) {
-            wsClients.delete(convId);
-          }
-        }
-      });
-      wsUserMap.delete(ws);
-      console.log('WebSocket client disconnected');
-      broadcastPresenceUpdate();
-    });
-
-    ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-    });
-  });
 
   return httpServer;
 }
