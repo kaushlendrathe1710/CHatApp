@@ -937,7 +937,7 @@ export default function Home() {
         const participant = selectedConversation?.participants.find(
           (p) => p.userId === id
         );
-        return participant ? getUserDisplayName(participant.user) : "Someone";
+        return participant?.user ? getUserDisplayName(participant.user) : "Someone";
       });
   };
 
@@ -949,7 +949,7 @@ export default function Home() {
     const name =
       (conv.isGroup || conv.isBroadcast) && conv.name
         ? conv.name
-        : otherParticipants.length > 0
+        : otherParticipants.length > 0 && otherParticipants[0].user
         ? getUserDisplayName(otherParticipants[0].user)
         : "";
     return name.toLowerCase().includes(searchQuery.toLowerCase());
