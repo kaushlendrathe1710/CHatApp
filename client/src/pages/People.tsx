@@ -27,10 +27,18 @@ export default function People() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch all users (shown when no search query)
+  // Get current user
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ['/api/auth/user'],
+  });
+
+  // Check if user is admin (admin or super_admin can see all users)
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
+
+  // Fetch all users (only for admins, and only when not searching)
   const { data: allUsers = [], isLoading: isLoadingAll } = useQuery<User[]>({
     queryKey: ['/api/users'],
-    enabled: !debouncedSearch,
+    enabled: isAdmin && !debouncedSearch,
   });
 
   // Search users by username
@@ -47,14 +55,9 @@ export default function People() {
     enabled: !!debouncedSearch,
   });
 
-  // Use search results if searching, otherwise show all users
-  const displayedUsers = debouncedSearch ? searchResults : allUsers;
+  // Use search results if searching, otherwise show all users (for admins only)
+  const displayedUsers = debouncedSearch ? searchResults : (isAdmin ? allUsers : []);
   const isLoading = debouncedSearch ? isSearching : isLoadingAll;
-
-  // Get current user
-  const { data: currentUser } = useQuery<User>({
-    queryKey: ['/api/auth/user'],
-  });
 
   // Create conversation mutation
   const createConversationMutation = useMutation({
@@ -142,10 +145,14 @@ export default function People() {
         ) : displayedUsers.length === 0 ? (
           <Card className="p-12">
             <div className="text-center space-y-2">
-              <UsersIcon className="h-12 w-12 mx-auto text-muted-foreground" />
-              <h3 className="text-lg font-semibold">No people found</h3>
+              <Search className="h-12 w-12 mx-auto text-muted-foreground" />
+              <h3 className="text-lg font-semibold">
+                {searchQuery ? "No people found" : "Search for people"}
+              </h3>
               <p className="text-sm text-muted-foreground">
-                {searchQuery ? "Try adjusting your search" : "No users available"}
+                {searchQuery 
+                  ? "Try adjusting your search" 
+                  : "Type a username to find people and start chatting"}
               </p>
             </div>
           </Card>
