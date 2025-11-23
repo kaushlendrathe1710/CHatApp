@@ -937,10 +937,8 @@ export default function Home() {
   return (
     <>
       <div 
-        className="flex bg-background" 
+        className="flex bg-background overflow-hidden fixed inset-0" 
         style={{ 
-          height: '100dvh',
-          boxSizing: 'border-box',
           paddingTop: 'max(16px, calc(env(safe-area-inset-top, 0px) + var(--viewport-safe-top, 0px)))',
           paddingBottom: 'max(8px, calc(env(safe-area-inset-bottom, 0px) + var(--viewport-safe-bottom, 0px)))',
         }}
