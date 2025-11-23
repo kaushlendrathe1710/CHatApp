@@ -209,7 +209,7 @@ function ChatMessageComponent({
     if ((message.type === 'image' || message.type === 'video' || message.type === 'document' || message.type === 'audio' || message.type === 'file') && message.fileUrl) {
       const fileType = message.type === 'file' ? 'document' : message.type;
       return (
-        <div className="space-y-2">
+        <div className="space-y-2 overflow-hidden max-w-full">
           <FilePreview
             fileUrl={message.fileUrl}
             fileName={message.fileName || 'File'}
@@ -219,7 +219,7 @@ function ChatMessageComponent({
             showDownload={true}
           />
           {message.content && (
-            <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full">{message.content}</p>
           )}
         </div>
       );
@@ -251,7 +251,7 @@ function ChatMessageComponent({
             <Shield className="h-3 w-3" />
             <span>Encrypted</span>
           </div>
-          <p className="text-sm whitespace-pre-wrap break-words" data-testid={`text-message-${message.id}`}>
+          <p className="text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full" data-testid={`text-message-${message.id}`}>
             {decryptedContent}
           </p>
         </div>
@@ -260,7 +260,7 @@ function ChatMessageComponent({
 
     // Plain text message
     return (
-      <p className="text-sm whitespace-pre-wrap break-words" data-testid={`text-message-${message.id}`}>
+      <p className="text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full" data-testid={`text-message-${message.id}`}>
         {message.content}
       </p>
     );
@@ -308,17 +308,17 @@ function ChatMessageComponent({
       )}
       {!isSelectionMode && showAvatar && isOwn && <div className="h-8 w-8 flex-shrink-0" />}
       
-      <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[65%] md:max-w-[50%] min-w-0 gap-1`}>
+      <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[65%] md:max-w-[50%] min-w-0 gap-1 overflow-hidden`}>
         {isGroup && !isOwn && showAvatar && (
-          <span className="text-xs font-medium px-3 text-muted-foreground" data-testid="text-sender-name">
+          <span className="text-xs font-medium px-3 text-muted-foreground truncate overflow-hidden max-w-full" data-testid="text-sender-name">
             {senderName}
           </span>
         )}
         
         {/* Wrap message bubble and action menu in group for hover */}
-        <div className="group relative flex items-start gap-1">
+        <div className="group relative flex items-start gap-1 max-w-full overflow-hidden">
           <div
-            className={`rounded-2xl px-3 py-2 min-w-0 break-words ${
+            className={`rounded-2xl px-3 py-2 min-w-0 max-w-full break-words overflow-hidden ${
               isOwn
                 ? 'bg-primary text-primary-foreground rounded-br-sm'
                 : 'bg-card border border-card-border rounded-bl-sm'
