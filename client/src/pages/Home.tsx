@@ -692,15 +692,20 @@ export default function Home() {
 
   const handleJumpToReply = () => {
     if (!replyToMessage) return;
-    
+    handleJumpToMessage(replyToMessage.id);
+  };
+
+  const handleJumpToMessage = (messageId: string) => {
     // Find the message element
-    const messageElement = document.querySelector(`[data-message-id="${replyToMessage.id}"]`);
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    
     if (messageElement) {
       // Scroll to the message
       messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
       // Add highlight animation
       messageElement.classList.add('message-highlight');
+      
       setTimeout(() => {
         messageElement.classList.remove('message-highlight');
       }, 2000);
@@ -1464,6 +1469,7 @@ export default function Home() {
                             onEdit={handleEdit}
                             onForward={handleForward}
                             onDelete={handleDelete}
+                            onJumpToMessage={handleJumpToMessage}
                             isEditing={editingMessageId === message.id}
                             editContent={editContent}
                             onEditContentChange={setEditContent}

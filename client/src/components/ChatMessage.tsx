@@ -31,6 +31,7 @@ interface ChatMessageProps {
   onEdit?: (message: MessageWithSender) => void;
   onForward?: (message: MessageWithSender) => void;
   onDelete?: (message: MessageWithSender) => void;
+  onJumpToMessage?: (messageId: string) => void;
   isEditing?: boolean;
   editContent?: string;
   onEditContentChange?: (content: string) => void;
@@ -55,6 +56,7 @@ function ChatMessageComponent({
   onEdit,
   onForward,
   onDelete,
+  onJumpToMessage,
   isEditing = false,
   editContent = '',
   onEditContentChange,
@@ -171,12 +173,30 @@ function ChatMessageComponent({
     const repliedToName = getUserDisplayName(message.replyTo.sender);
     const repliedContent = getReplyPreviewText(message.replyTo.content, message.replyTo.type || 'text');
     
+    const handleClick = () => {
+      if (onJumpToMessage && message.replyToId) {
+        onJumpToMessage(message.replyToId);
+      }
+    };
+    
     return (
-      <div className={`mb-2 pl-3 border-l-4 py-1 overflow-hidden ${
-        isOwn 
-          ? 'border-primary-foreground/30 bg-primary-foreground/10' 
-          : 'border-primary/30 bg-primary/10'
-      }`} data-testid={`reply-preview-${message.id}`}>
+      <div 
+        onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleClick();
+          }
+        }}
+        className={`mb-2 pl-3 border-l-4 py-1 overflow-hidden cursor-pointer hover-elevate active-elevate-2 rounded ${
+          isOwn 
+            ? 'border-primary-foreground/30 bg-primary-foreground/10' 
+            : 'border-primary/30 bg-primary/10'
+        }`} 
+        data-testid={`reply-preview-${message.id}`}
+      >
         <p className={`text-xs font-semibold truncate ${
           isOwn ? 'text-primary-foreground' : 'text-primary'
         }`}>
