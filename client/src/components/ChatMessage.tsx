@@ -152,12 +152,12 @@ function ChatMessageComponent({
        message.replyTo.type === 'file' ? 'File' : 'Message');
     
     return (
-      <div className={`mb-2 pl-3 border-l-4 py-1 ${
+      <div className={`mb-2 pl-3 border-l-4 py-1 min-w-0 max-w-full ${
         isOwn 
           ? 'border-primary-foreground/30 bg-primary-foreground/10' 
           : 'border-primary/30 bg-primary/10'
       }`} data-testid={`reply-preview-${message.id}`}>
-        <p className={`text-xs font-semibold ${
+        <p className={`text-xs font-semibold truncate ${
           isOwn ? 'text-primary-foreground' : 'text-primary'
         }`}>
           {repliedToName}
