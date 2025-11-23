@@ -238,31 +238,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
-  // Get all users (sanitized based on privacy settings)
+  // Get all users (respecting privacy settings including past_chats)
   app.get('/api/users', isAuthenticated, async (req: any, res) => {
     try {
       const currentUserId = req.user.id;
       
-      const allUsers = await storage.getAllUsers();
+      // Use getDiscoverableUsers which properly handles all privacy settings
+      const discoverableUsers = await storage.getDiscoverableUsers(currentUserId);
       
-      // Filter users based on privacy settings
-      const filteredUsers = allUsers
-        .filter(u => u.id !== currentUserId) // Exclude current user
-        .filter(u => u.profileVisibility !== 'hidden'); // Exclude hidden users
-      
-      // Sanitize each user's data based on their privacy settings
-      const sanitizedUsers = await Promise.all(
-        filteredUsers.map(user => storage.sanitizeUserData(user, currentUserId))
-      );
-      
-      res.json(sanitizedUsers);
+      res.json(discoverableUsers);
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ message: "Failed to fetch users" });
     }
   });
 
-  // Search users by username
+  // Search users by username (respecting privacy settings)
   app.get('/api/users/search', isAuthenticated, async (req: any, res) => {
     try {
       const currentUserId = req.user.id;
@@ -272,21 +263,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json([]);
       }
       
-      const allUsers = await storage.getAllUsers();
+      // First get discoverable users (respects privacy including past_chats)
+      const discoverableUsers = await storage.getDiscoverableUsers(currentUserId);
       
-      // Search for users whose username contains the search query
-      const matchedUsers = allUsers
-        .filter(u => u.id !== currentUserId) // Exclude current user
-        .filter(u => u.profileVisibility !== 'hidden') // Respect privacy settings
+      // Then filter by username search query
+      const matchedUsers = discoverableUsers
         .filter(u => u.username && u.username.toLowerCase().includes(searchQuery))
         .slice(0, 20); // Limit to 20 results
       
-      // Sanitize user data
-      const sanitizedUsers = await Promise.all(
-        matchedUsers.map(user => storage.sanitizeUserData(user, currentUserId))
-      );
-      
-      res.json(sanitizedUsers);
+      res.json(matchedUsers);
     } catch (error) {
       console.error("Error searching users:", error);
       res.status(500).json({ message: "Failed to search users" });
