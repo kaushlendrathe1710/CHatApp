@@ -510,7 +510,7 @@ export const MessageComposer = React.memo(function MessageComposer({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-1 sm:gap-2">
         <FileAttachmentUploader
           onFileUpload={handleFileUpload}
           disabled={disabled}
@@ -521,7 +521,7 @@ export const MessageComposer = React.memo(function MessageComposer({
           variant="ghost"
           onClick={() => setCameraOpen(true)}
           disabled={disabled}
-          className="flex-shrink-0"
+          className="flex-shrink-0 min-w-[44px] min-h-[44px]"
           data-testid="button-camera"
         >
           <Camera className="h-5 w-5" />
@@ -533,7 +533,7 @@ export const MessageComposer = React.memo(function MessageComposer({
               size="icon"
               variant="ghost"
               disabled={disabled}
-              className="flex-shrink-0"
+              className="flex-shrink-0 min-w-[44px] min-h-[44px]"
               data-testid="button-emoji-picker"
             >
               <Smile className="h-5 w-5" />
@@ -547,8 +547,8 @@ export const MessageComposer = React.memo(function MessageComposer({
             <EmojiPicker
               onEmojiClick={handleEmojiClick}
               theme={Theme.AUTO}
-              width={350}
-              height={400}
+              width={320}
+              height={380}
               searchPlaceholder="Search emoji..."
               previewConfig={{ showPreview: false }}
             />
@@ -563,7 +563,7 @@ export const MessageComposer = React.memo(function MessageComposer({
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={placeholder}
-            className="min-h-[44px] max-h-32 resize-none"
+            className="min-h-[44px] max-h-32 resize-none text-base"
             rows={1}
             data-testid="input-message"
           />
@@ -576,7 +576,7 @@ export const MessageComposer = React.memo(function MessageComposer({
             variant="ghost"
             onClick={() => setVoiceRecording(true)}
             disabled={disabled}
-            className="flex-shrink-0"
+            className="flex-shrink-0 min-w-[44px] min-h-[44px]"
             data-testid="button-voice-record"
           >
             <Mic className="h-5 w-5" />
@@ -586,7 +586,7 @@ export const MessageComposer = React.memo(function MessageComposer({
             size="icon"
             onClick={handleSend}
             disabled={(!message.trim() && !pendingFileData) || disabled}
-            className="flex-shrink-0"
+            className="flex-shrink-0 min-w-[44px] min-h-[44px] bg-primary hover:bg-primary/90 text-primary-foreground"
             data-testid="button-send"
           >
             <Send className="h-5 w-5" />

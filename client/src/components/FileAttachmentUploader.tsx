@@ -164,7 +164,7 @@ export function FileAttachmentUploader({ onFileUpload, disabled }: FileAttachmen
         variant="ghost"
         onClick={() => setIsOpen(true)}
         disabled={disabled}
-        className="flex-shrink-0"
+        className="flex-shrink-0 min-w-[44px] min-h-[44px]"
         data-testid="button-attach-file"
       >
         <Paperclip className="h-5 w-5" />
