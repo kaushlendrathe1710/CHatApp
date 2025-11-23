@@ -318,11 +318,12 @@ function ChatMessageComponent({
         {/* Wrap message bubble and action menu in group for hover */}
         <div className="group relative flex items-start gap-1 max-w-full">
           <div
-            className={`rounded-2xl px-3 py-2 min-w-0 max-w-full break-words ${
+            className={`rounded-2xl px-3 py-2 min-w-0 max-w-full break-words border-2 border-red-500 ${
               isOwn
                 ? 'bg-primary text-primary-foreground rounded-br-sm'
                 : 'bg-card border border-card-border rounded-bl-sm'
             } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+            style={{ minHeight: '40px', backgroundColor: isOwn ? '#22c55e' : '#ffffff', color: isOwn ? '#000000' : '#000000' }}
           >
             {renderForwardedFromBadge()}
             {renderReplyPreview()}
