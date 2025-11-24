@@ -15,32 +15,32 @@ export interface NotificationOptions {
  * Request notification permission from the user
  */
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (!('Notification' in window)) {
-    console.warn('[Notifications] Browser does not support notifications');
+  if (!("Notification" in window)) {
+    console.warn("[Notifications] Browser does not support notifications");
     return false;
   }
 
-  if (Notification.permission === 'granted') {
-    console.log('[Notifications] Permission already granted');
+  if (Notification.permission === "granted") {
+    console.log("[Notifications] Permission already granted");
     return true;
   }
 
-  if (Notification.permission === 'denied') {
-    console.warn('[Notifications] Permission denied by user');
+  if (Notification.permission === "denied") {
+    console.warn("[Notifications] Permission denied by user");
     return false;
   }
 
   try {
-    console.log('[Notifications] Requesting permission...');
+    console.log("[Notifications] Requesting permission...");
     const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      console.log('[Notifications] Permission granted!');
+    if (permission === "granted") {
+      console.log("[Notifications] Permission granted!");
     } else {
-      console.warn('[Notifications] Permission not granted:', permission);
+      console.warn("[Notifications] Permission not granted:", permission);
     }
-    return permission === 'granted';
+    return permission === "granted";
   } catch (error) {
-    console.error('[Notifications] Failed to request permission:', error);
+    console.error("[Notifications] Failed to request permission:", error);
     return false;
   }
 }
@@ -49,29 +49,63 @@ export async function requestNotificationPermission(): Promise<boolean> {
  * Check if notifications are supported and permitted
  */
 export function canShowNotifications(): boolean {
-  return (
-    'Notification' in window &&
-    Notification.permission === 'granted'
-  );
+  return "Notification" in window && Notification.permission === "granted";
+}
+
+/**
+ * Play a notification sound (simple beep)
+ */
+export function playNotificationSound(): void {
+  try {
+    // Create audio context
+    const audioContext = new (window.AudioContext ||
+      (window as any).webkitAudioContext)();
+
+    // Create oscillator for beep
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    // Connect nodes
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    // Configure beep: 800Hz, 200ms
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+    oscillator.type = "sine";
+
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.01,
+      audioContext.currentTime + 0.2
+    );
+
+    // Play beep
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.2);
+  } catch (error) {
+    console.warn("Could not play notification sound:", error);
+  }
 }
 
 /**
  * Show a browser notification
  * Now shows notifications ALWAYS, even when app is open (mobile/laptop)
  */
-export function showBrowserNotification(options: NotificationOptions): Notification | null {
+export function showBrowserNotification(
+  options: NotificationOptions
+): Notification | null {
   if (!canShowNotifications()) {
-    console.log('[Notifications] Cannot show - permission not granted');
+    console.log("[Notifications] Cannot show - permission not granted");
     return null;
   }
 
   try {
-    console.log('[Notifications] Showing notification:', options.title);
+    console.log("[Notifications] Showing notification:", options.title);
     const notification = new Notification(options.title, {
       body: options.body,
-      icon: options.icon || '/icon-192x192.png',
+      icon: options.icon || "/icon-192x192.png",
       tag: options.tag,
-      badge: '/icon-192x192.png',
+      badge: "/icon-192x192.png",
       requireInteraction: false,
       silent: false,
     });
@@ -93,7 +127,7 @@ export function showBrowserNotification(options: NotificationOptions): Notificat
 
     return notification;
   } catch (error) {
-    console.error('Failed to show notification:', error);
+    console.error("Failed to show notification:", error);
     return null;
   }
 }
@@ -102,8 +136,8 @@ export function showBrowserNotification(options: NotificationOptions): Notificat
  * Get notification permission status
  */
 export function getNotificationPermission(): NotificationPermission {
-  if (!('Notification' in window)) {
-    return 'denied';
+  if (!("Notification" in window)) {
+    return "denied";
   }
   return Notification.permission;
 }
