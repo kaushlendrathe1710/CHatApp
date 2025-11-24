@@ -7,7 +7,17 @@ import React, {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Smile, X, Camera, Image as ImageIcon, FileText, Reply, Mic } from "lucide-react";
+import {
+  Paperclip,
+  Send,
+  Smile,
+  X,
+  Camera,
+  Image as ImageIcon,
+  FileText,
+  Reply,
+  Mic,
+} from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -140,16 +150,15 @@ export const MessageComposer = React.memo(function MessageComposer({
   const handleCameraCapture = async (file: File) => {
     try {
       // Get signed upload URL from server
-      const response = await apiRequest(
-        "POST",
-        "/api/messages/upload-url",
-        {
-          fileName: file.name,
-          mimeType: file.type,
-          fileSize: file.size,
-        }
-      );
-      const uploadResponse = await response.json() as { uploadURL: string; objectKey: string };
+      const response = await apiRequest("POST", "/api/messages/upload-url", {
+        fileName: file.name,
+        mimeType: file.type,
+        fileSize: file.size,
+      });
+      const uploadResponse = (await response.json()) as {
+        uploadURL: string;
+        objectKey: string;
+      };
       console.log("Upload response received:", JSON.stringify(uploadResponse));
 
       // Upload to S3 using signed URL
@@ -162,11 +171,19 @@ export const MessageComposer = React.memo(function MessageComposer({
         body: file,
       });
 
-      console.log("S3 upload response status:", uploadResult.status, uploadResult.statusText);
+      console.log(
+        "S3 upload response status:",
+        uploadResult.status,
+        uploadResult.statusText
+      );
       if (!uploadResult.ok) {
         const errorText = await uploadResult.text();
         console.error("S3 upload error:", errorText);
-        throw new Error(`Failed to upload file to cloud storage: ${uploadResult.status} ${errorText.substring(0, 200)}`);
+        throw new Error(
+          `Failed to upload file to cloud storage: ${
+            uploadResult.status
+          } ${errorText.substring(0, 200)}`
+        );
       }
 
       // Set file metadata to public and get the public objectPath
@@ -251,10 +268,10 @@ export const MessageComposer = React.memo(function MessageComposer({
     // Check if any of the clipboard items is an image
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      
-      if (item.type.startsWith('image/')) {
+
+      if (item.type.startsWith("image/")) {
         e.preventDefault();
-        
+
         const file = item.getAsFile();
         if (!file) continue;
 
@@ -275,7 +292,10 @@ export const MessageComposer = React.memo(function MessageComposer({
               fileSize: file.size,
             }
           );
-          const uploadResponse = await response.json() as { uploadURL: string; objectKey: string };
+          const uploadResponse = (await response.json()) as {
+            uploadURL: string;
+            objectKey: string;
+          };
 
           // Upload to S3 using signed URL
           const uploadResult = await fetch(uploadResponse.uploadURL, {
@@ -336,30 +356,32 @@ export const MessageComposer = React.memo(function MessageComposer({
             variant: "destructive",
           });
         }
-        
+
         // Only process the first image
         break;
       }
     }
   };
 
-  const handleVoiceRecordComplete = async (audioBlob: Blob, duration: number) => {
+  const handleVoiceRecordComplete = async (
+    audioBlob: Blob,
+    duration: number
+  ) => {
     try {
       // Create file from blob
       const fileName = `voice-message-${Date.now()}.webm`;
       const file = new File([audioBlob], fileName, { type: audioBlob.type });
 
       // Get signed upload URL from server
-      const response = await apiRequest(
-        "POST",
-        "/api/messages/upload-url",
-        {
-          fileName: file.name,
-          mimeType: file.type,
-          fileSize: file.size,
-        }
-      );
-      const uploadResponse = await response.json() as { uploadURL: string; objectKey: string };
+      const response = await apiRequest("POST", "/api/messages/upload-url", {
+        fileName: file.name,
+        mimeType: file.type,
+        fileSize: file.size,
+      });
+      const uploadResponse = (await response.json()) as {
+        uploadURL: string;
+        objectKey: string;
+      };
 
       // Upload to S3 using signed URL
       const uploadResult = await fetch(uploadResponse.uploadURL, {
@@ -409,13 +431,14 @@ export const MessageComposer = React.memo(function MessageComposer({
         title: "Voice Message Sent",
         description: `${duration}s recording sent successfully`,
       });
-
     } catch (error) {
       console.error("Error uploading voice message:", error);
       toast({
         title: "Upload Failed",
         description:
-          error instanceof Error ? error.message : "Failed to upload voice message",
+          error instanceof Error
+            ? error.message
+            : "Failed to upload voice message",
         variant: "destructive",
       });
       setVoiceRecording(false);
@@ -448,28 +471,30 @@ export const MessageComposer = React.memo(function MessageComposer({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <p className="text-xs font-medium text-primary truncate">
-                {replyToMessage.sender.fullName || replyToMessage.sender.email?.split('@')[0] || 'User'}
+                {replyToMessage.sender.fullName ||
+                  replyToMessage.sender.email?.split("@")[0] ||
+                  "User"}
               </p>
-              {replyToMessage.type === 'image' && (
+              {replyToMessage.type === "image" && (
                 <ImageIcon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
               )}
-              {replyToMessage.type === 'file' && (
+              {replyToMessage.type === "file" && (
                 <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
               )}
             </div>
             <p className="text-sm text-muted-foreground truncate">
-              {replyToMessage.type === 'image' ? (
+              {replyToMessage.type === "image" ? (
                 <span className="flex items-center gap-1">
                   <ImageIcon className="h-3.5 w-3.5 flex-shrink-0" />
                   Photo
                 </span>
-              ) : replyToMessage.type === 'file' ? (
+              ) : replyToMessage.type === "file" ? (
                 <span className="flex items-center gap-1">
                   <FileText className="h-3.5 w-3.5 flex-shrink-0" />
-                  {replyToMessage.fileName || 'File'}
+                  {replyToMessage.fileName || "File"}
                 </span>
               ) : (
-                replyToMessage.content || 'Message'
+                replyToMessage.content || "Message"
               )}
             </p>
           </div>
