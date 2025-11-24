@@ -134,7 +134,9 @@ export function ConversationListItem({
                 return (
                   <>
                     <ImageIcon className="h-3.5 w-3.5 flex-shrink-0" />
-                    <span className="truncate">{preview.content}</span>
+                    <span className="text-wrap line-clamp-1 truncate">
+                      {preview.content}
+                    </span>
                   </>
                 );
               }
@@ -142,11 +144,11 @@ export function ConversationListItem({
                 return (
                   <>
                     <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
-                    <span className="truncate">{preview.content}</span>
+                    <span className="text-wrap line-clamp-1 truncate">{preview.content}</span>
                   </>
                 );
               }
-              return <span className="truncate">{preview.content}</span>;
+              return <span className="text-wrap line-clamp-1 truncate">{preview.content}</span>;
             })()}
           </div>
           

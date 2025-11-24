@@ -176,7 +176,7 @@ export default function Home() {
               (c) => c.id === message.data.conversationId
             );
 
-            let conversationName = "New Message";
+            let conversationName = "";
             let senderName = "Someone";
             let isGroup = false;
 
