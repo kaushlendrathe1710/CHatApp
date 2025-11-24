@@ -91,11 +91,11 @@ export const MessageComposer = React.memo(function MessageComposer({
     }
   }, [focusAfterSend]);
 
-    useEffect(() => {
-      if (replyToMessage) {
-        setFocusReason("reply");
-      }
-    }, [replyToMessage]);
+  useEffect(() => {
+    if (replyToMessage) {
+      setFocusReason("reply");
+    }
+  }, [replyToMessage]);
 
   // Focus AFTER textarea is fully positioned in DOM
   useLayoutEffect(() => {

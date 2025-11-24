@@ -1579,6 +1579,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const s3Service = new S3StorageService();
+      console.log("Setting file metadata for:", req.body.fileUrl);
       const objectPath = await s3Service.trySetObjectEntityAclPolicy(
         req.body.fileUrl,
         {
@@ -1586,6 +1587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           visibility: "public",
         },
       );
+      console.log("File metadata set for:", objectPath);
 
       res.status(200).json({ objectPath });
     } catch (error) {
