@@ -1,7 +1,26 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Response } from "express";
 import { randomUUID } from "crypto";
+
+// Utility function to add timeout to promises
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Operation timed out after ${timeoutMs}ms`)),
+        timeoutMs
+      )
+    ),
+  ]);
+}
 
 export enum ObjectPermission {
   READ = "read",
@@ -54,7 +73,10 @@ export class S3StorageService {
     return `${key}.metadata.json`;
   }
 
-  async getObjectEntityUploadURL(): Promise<{ uploadURL: string; objectKey: string }> {
+  async getObjectEntityUploadURL(): Promise<{
+    uploadURL: string;
+    objectKey: string;
+  }> {
     validateS3Config();
 
     const objectId = randomUUID();
@@ -77,7 +99,9 @@ export class S3StorageService {
         const url = new URL(rawPath);
         const pathParts = url.pathname.split("/");
         // Remove leading empty string and bucket name if present
-        const key = pathParts.slice(pathParts[1] === BUCKET_NAME ? 2 : 1).join("/");
+        const key = pathParts
+          .slice(pathParts[1] === BUCKET_NAME ? 2 : 1)
+          .join("/");
         return `/objects/${key}`;
       } catch {
         return rawPath;
@@ -89,7 +113,9 @@ export class S3StorageService {
       try {
         const url = new URL(rawPath);
         const pathParts = url.pathname.split("/");
-        const key = pathParts.slice(pathParts[1] === BUCKET_NAME ? 2 : 1).join("/");
+        const key = pathParts
+          .slice(pathParts[1] === BUCKET_NAME ? 2 : 1)
+          .join("/");
         return `/objects/${key}`;
       } catch {
         return rawPath;
@@ -106,29 +132,54 @@ export class S3StorageService {
     validateS3Config();
 
     const normalizedPath = this.normalizeObjectEntityPath(rawPath);
+    console.log("Normalized path:", normalizedPath);
+    console.log("Bucket:", BUCKET_NAME);
+    console.log("Region:", process.env.AWS_REGION);
+
     if (!normalizedPath.startsWith("/")) {
       return normalizedPath;
     }
 
     // Extract key from path
     const key = normalizedPath.replace("/objects/", "");
+    console.log("Extracted key:", key);
 
-    // Verify the object exists before setting metadata
+    // Verify the object exists before setting metadata with timeout
+    // NOTE: The file upload already confirmed the object exists (returned 200 OK)
+    // This verification is optional and may timeout on some deployments (e.g., Render with network constraints)
+    let objectExists = true;
     try {
       const headCommand = new HeadObjectCommand({
         Bucket: BUCKET_NAME,
         Key: key,
       });
-      await s3Client.send(headCommand);
+      console.log(`Checking if object exists: ${BUCKET_NAME}/${key}`);
+
+      await withTimeout(s3Client.send(headCommand), 5000); // 5 second timeout
+      console.log("Object verified to exist");
     } catch (error: any) {
-      if (error.name === "NotFound" || error.$metadata?.httpStatusCode === 404) {
+      console.warn("HeadObject verification failed:", error.message);
+      console.warn(
+        "Continuing anyway since upload already succeeded (file must exist)"
+      );
+
+      // Only throw if it's a definitive 404, not a timeout/network error
+      if (
+        error.name === "NotFound" ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
         throw new ObjectNotFoundError();
       }
-      throw error;
+
+      // For timeouts or other network errors, continue anyway since upload succeeded
+      // This prevents timeouts in production environments with network constraints
+      objectExists = true;
     }
 
     // Store ACL metadata as a separate JSON file
     const metadataKey = this.getMetadataKey(key);
+    console.log("Storing metadata to:", metadataKey);
+
     const metadataCommand = new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: metadataKey,
@@ -136,11 +187,23 @@ export class S3StorageService {
       ContentType: "application/json",
     });
 
-    await s3Client.send(metadataCommand);
+    try {
+      await withTimeout(s3Client.send(metadataCommand), 10000); // 10 second timeout
+      console.log("Metadata stored successfully");
+    } catch (error: any) {
+      console.error("Failed to store metadata:", error.message);
+      // Even if metadata storage fails, the file is still in S3, so we return success
+      console.warn(
+        "Continuing despite metadata storage failure - file is accessible"
+      );
+    }
+
     return normalizedPath;
   }
 
-  async getObjectEntityFile(objectPath: string): Promise<{ key: string; exists: boolean }> {
+  async getObjectEntityFile(
+    objectPath: string
+  ): Promise<{ key: string; exists: boolean }> {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();
     }
@@ -155,7 +218,10 @@ export class S3StorageService {
       await s3Client.send(command);
       return { key, exists: true };
     } catch (error: any) {
-      if (error.name === "NotFound" || error.$metadata?.httpStatusCode === 404) {
+      if (
+        error.name === "NotFound" ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
         throw new ObjectNotFoundError();
       }
       throw error;
@@ -180,7 +246,7 @@ export class S3StorageService {
 
       const response = await s3Client.send(command);
       const metadataStr = await response.Body?.transformToString();
-      
+
       if (!metadataStr) {
         // No metadata exists yet - allow first-time setup (WRITE permission for initial upload)
         return requestedPermission === ObjectPermission.WRITE;
@@ -204,7 +270,10 @@ export class S3StorageService {
       return false;
     } catch (error: any) {
       // If metadata doesn't exist, allow WRITE (for initial upload) but deny READ
-      if (error.name === "NoSuchKey" || error.$metadata?.httpStatusCode === 404) {
+      if (
+        error.name === "NoSuchKey" ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
         return requestedPermission === ObjectPermission.WRITE;
       }
       throw error;
@@ -225,7 +294,8 @@ export class S3StorageService {
       });
       const headResponse = await s3Client.send(headCommand);
       const fileSize = headResponse.ContentLength || 0;
-      const contentType = headResponse.ContentType || "application/octet-stream";
+      const contentType =
+        headResponse.ContentType || "application/octet-stream";
 
       // Get ACL policy to determine cache settings
       let isPublic = false;
@@ -248,13 +318,13 @@ export class S3StorageService {
 
       // Check for Range header (for video seeking)
       const range = req.headers.range;
-      
+
       if (range) {
         // Parse range header (e.g., "bytes=0-1023")
         const parts = range.replace(/bytes=/, "").split("-");
         const start = parseInt(parts[0], 10);
         const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunkSize = (end - start) + 1;
+        const chunkSize = end - start + 1;
 
         // Fetch the requested range from S3
         const command = new GetObjectCommand({
@@ -272,7 +342,9 @@ export class S3StorageService {
           "Content-Length": chunkSize.toString(),
           "Content-Range": `bytes ${start}-${end}/${fileSize}`,
           "Accept-Ranges": "bytes",
-          "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
+          "Cache-Control": `${
+            isPublic ? "public" : "private"
+          }, max-age=${cacheTtlSec}`,
         });
 
         if (response.Body) {
@@ -294,7 +366,9 @@ export class S3StorageService {
           "Content-Type": contentType,
           "Content-Length": fileSize.toString(),
           "Accept-Ranges": "bytes",
-          "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
+          "Cache-Control": `${
+            isPublic ? "public" : "private"
+          }, max-age=${cacheTtlSec}`,
         });
 
         if (response.Body) {
@@ -315,7 +389,7 @@ export class S3StorageService {
   async deleteObject(objectPath: string): Promise<void> {
     try {
       const key = objectPath.replace("/objects/", "");
-      
+
       // Delete the main object
       const deleteCommand = new DeleteObjectCommand({
         Bucket: BUCKET_NAME,

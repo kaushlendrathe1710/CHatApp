@@ -507,7 +507,7 @@ function ChatMessageComponent({
               (onEdit && isOwn) ||
               (onDelete && isOwn) ||
               message.content) && (
-              <DropdownMenu>
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <Button
                     size="icon"
@@ -539,7 +539,13 @@ function ChatMessageComponent({
                   )}
                   {onReply && (
                     <DropdownMenuItem
-                      onClick={() => onReply(message)}
+                      onClick={() => {
+                        console.log(
+                          "[ChatMessage] Reply button clicked for message:",
+                          message.id
+                        );
+                        onReply(message);
+                      }}
                       data-testid={`menu-reply-${message.id}`}
                     >
                       <Reply className="h-4 w-4 mr-2" />
