@@ -73,49 +73,53 @@ export const MessageComposer = React.memo(function MessageComposer({
     mimeType: string;
     type: "image" | "video" | "document" | "audio";
   } | null>(null);
+  const [focusReason, setFocusReason] = useState<
+    "mount" | "reply" | "send" | null
+  >(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
-  // Auto-focus input on mount
+  // Initial mount focus
   useEffect(() => {
-    console.warn("MessageComposer: Auto-focusing on mount");
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
+    setFocusReason("mount");
   }, []);
 
-  // Focus after sending message, when not disabled
-  useLayoutEffect(() => {
-    console.warn(
-      "MessageComposer: useLayoutEffect for focusAfterSend triggered, focusAfterSend:",
-      focusAfterSend,
-      "disabled:",
-      disabled
-    );
-    if (focusAfterSend && !disabled && textareaRef.current) {
-      console.warn(
-        "MessageComposer: Focusing textarea after send (not disabled)"
-      );
-      // Use setTimeout to ensure focus happens after any DOM updates
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-        }
-      }, 0);
-      setFocusAfterSend(false);
-    } else if (focusAfterSend && disabled) {
-      console.warn("MessageComposer: Waiting to focus, still disabled");
-    } else if (focusAfterSend && !textareaRef.current) {
-      console.warn(
-        "MessageComposer: focusAfterSend is true but textareaRef.current is null"
-      );
+  // Focus after message is sent
+  useEffect(() => {
+    if (focusAfterSend) {
+      setFocusReason("send");
     }
-  }, [focusAfterSend, disabled]);
+  }, [focusAfterSend]);
+
+    useEffect(() => {
+      if (replyToMessage) {
+        setFocusReason("reply");
+      }
+    }, [replyToMessage]);
+
+  // Focus AFTER textarea is fully positioned in DOM
+  useLayoutEffect(() => {
+    if (!textareaRef.current || disabled) return;
+
+    const shouldFocus =
+      focusReason === "mount" ||
+      focusReason === "send" ||
+      (focusReason === "reply" && replyToMessage);
+
+    if (!shouldFocus) return;
+
+    // Keep consistent height + apply focus
+    textareaRef.current.style.height = "auto";
+    textareaRef.current.focus();
+
+    setFocusReason(null);
+    setFocusAfterSend(false);
+  }, [focusReason, disabled, replyToMessage]);
 
   const handleSend = () => {
     // Allow sending if message has content OR if file is attached
     if (!disabled && (message.trim() || pendingFileData)) {
-      console.warn(
+      console.log(
         "MessageComposer: Sending message, setting focusAfterSend to true"
       );
       onSendMessage(message.trim() || "", pendingFileData || undefined);
@@ -503,6 +507,7 @@ export const MessageComposer = React.memo(function MessageComposer({
             variant="ghost"
             onClick={onCancelReply}
             className="flex-shrink-0 h-6 w-6"
+            tabIndex={-1}
             data-testid="button-cancel-reply"
           >
             <X className="h-4 w-4" />
