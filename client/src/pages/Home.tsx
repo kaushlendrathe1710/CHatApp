@@ -97,7 +97,7 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 export default function Home() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
-  
+
   // Track visual viewport offset for Android browser chrome
   useViewportSafeArea();
   const [selectedConversationId, setSelectedConversationId] = useState<
@@ -120,11 +120,14 @@ export default function Home() {
   const [groupSettingsDialogOpen, setGroupSettingsDialogOpen] = useState(false);
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
+  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(
+    new Set()
+  );
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [userDetailsDialogOpen, setUserDetailsDialogOpen] = useState(false);
-  const [selectedUserForDetails, setSelectedUserForDetails] = useState<User | null>(null);
+  const [selectedUserForDetails, setSelectedUserForDetails] =
+    useState<User | null>(null);
   const [callType, setCallType] = useState<"audio" | "video">("audio");
   const [isCallInitiator, setIsCallInitiator] = useState(false);
   const [incomingCallSignal, setIncomingCallSignal] = useState<any>(null);
@@ -170,22 +173,22 @@ export default function Home() {
             const conversation = conversations.find(
               (c) => c.id === message.data.conversationId
             );
-            
+
             if (conversation) {
               const sender = conversation.participants.find(
                 (p) => p.userId === message.data.senderId
               );
-              
+
               const senderName = sender
                 ? getUserDisplayName(sender.user)
                 : "Someone";
-              
+
               const conversationName = conversation.isGroup
                 ? conversation.name || "Group Chat"
                 : senderName;
 
               let notificationBody = message.data.content || "";
-              
+
               // Show file type if it's a media message
               if (message.data.type === "image") {
                 notificationBody = "Photo";
@@ -343,7 +346,7 @@ export default function Home() {
       const timer = setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       }, 300);
-      
+
       return () => clearTimeout(timer);
     }
   }, [selectedConversationId]);
@@ -557,7 +560,9 @@ export default function Home() {
 
   // Handle scroll to detect if user is at bottom
   useEffect(() => {
-    const scrollViewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    const scrollViewport = scrollAreaRef.current?.querySelector(
+      "[data-radix-scroll-area-viewport]"
+    );
     if (!scrollViewport) return;
 
     const handleScroll = () => {
@@ -566,8 +571,8 @@ export default function Home() {
       setShowScrollToBottom(!isAtBottom);
     };
 
-    scrollViewport.addEventListener('scroll', handleScroll);
-    return () => scrollViewport.removeEventListener('scroll', handleScroll);
+    scrollViewport.addEventListener("scroll", handleScroll);
+    return () => scrollViewport.removeEventListener("scroll", handleScroll);
   }, [selectedConversationId]);
 
   // Scroll to bottom function
@@ -697,17 +702,19 @@ export default function Home() {
 
   const handleJumpToMessage = (messageId: string) => {
     // Find the message element
-    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-    
+    const messageElement = document.querySelector(
+      `[data-message-id="${messageId}"]`
+    );
+
     if (messageElement) {
       // Scroll to the message
-      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      
+      messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
+
       // Add highlight animation
-      messageElement.classList.add('message-highlight');
-      
+      messageElement.classList.add("message-highlight");
+
       setTimeout(() => {
-        messageElement.classList.remove('message-highlight');
+        messageElement.classList.remove("message-highlight");
       }, 2000);
     }
   };
@@ -757,11 +764,11 @@ export default function Home() {
       } else {
         newSet.add(messageId);
       }
-      
+
       if (newSet.size === 0) {
         setIsSelectionMode(false);
       }
-      
+
       return newSet;
     });
   };
@@ -782,26 +789,28 @@ export default function Home() {
 
   const handleDeleteSelected = async () => {
     if (selectedMessages.size === 0) return;
-    
+
     try {
       await Promise.all(
         Array.from(selectedMessages).map((messageId) =>
           apiRequest("DELETE", `/api/messages/${messageId}`)
         )
       );
-      
+
       queryClient.invalidateQueries({
         queryKey: ["/api/messages", selectedConversationId],
       });
       queryClient.invalidateQueries({
         queryKey: ["/api/conversations"],
       });
-      
+
       toast({
         title: "Messages deleted",
-        description: `${selectedMessages.size} message${selectedMessages.size > 1 ? 's' : ''} deleted`,
+        description: `${selectedMessages.size} message${
+          selectedMessages.size > 1 ? "s" : ""
+        } deleted`,
       });
-      
+
       handleExitSelectionMode();
     } catch (error) {
       console.error("Failed to delete messages:", error);
@@ -941,11 +950,13 @@ export default function Home() {
 
   return (
     <>
-      <div 
-        className="flex bg-background overflow-hidden fixed inset-0" 
-        style={{ 
-          paddingTop: 'max(16px, calc(env(safe-area-inset-top, 0px) + var(--viewport-safe-top, 0px)))',
-          paddingBottom: 'max(8px, calc(env(safe-area-inset-bottom, 0px) + var(--viewport-safe-bottom, 0px)))',
+      <div
+        className="flex bg-background overflow-hidden fixed inset-0"
+        style={{
+          paddingTop:
+            "max(16px, calc(env(safe-area-inset-top, 0px) + var(--viewport-safe-top, 0px)))",
+          paddingBottom:
+            "max(8px, calc(env(safe-area-inset-bottom, 0px) + var(--viewport-safe-bottom, 0px)))",
         }}
       >
         {/* Sidebar - Chat List */}
@@ -993,7 +1004,7 @@ export default function Home() {
             </button>
 
             <div className="flex items-center gap-1">
-              {(user?.role === 'admin' || user?.role === 'super_admin') && (
+              {(user?.role === "admin" || user?.role === "super_admin") && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1075,7 +1086,7 @@ export default function Home() {
           </div>
 
           {/* New Group Button (Admin Only) */}
-          {(user?.role === 'admin' || user?.role === 'super_admin') && (
+          {(user?.role === "admin" || user?.role === "super_admin") && (
             <div className="p-3 border-b flex-shrink-0">
               <Button
                 variant="outline"
@@ -1181,7 +1192,10 @@ export default function Home() {
                       >
                         <ArrowLeft className="h-5 w-5" />
                       </Button>
-                      <span className="font-semibold" data-testid="text-selection-count">
+                      <span
+                        className="font-semibold"
+                        data-testid="text-selection-count"
+                      >
                         {selectedMessages.size} selected
                       </span>
                     </div>
@@ -1200,130 +1214,144 @@ export default function Home() {
                         <Menu className="h-5 w-5" />
                       </Button>
 
-                  {(() => {
-                    const otherParticipant = selectedConversation.participants.find(
-                      (p) => p.userId !== user?.id
-                    );
-                    const isOnline = otherParticipant ? onlineUsers.has(otherParticipant.userId) : false;
-                    const isDirectMessage = !selectedConversation.isGroup && !selectedConversation.isBroadcast;
+                      {(() => {
+                        const otherParticipant =
+                          selectedConversation.participants.find(
+                            (p) => p.userId !== user?.id
+                          );
+                        const isOnline = otherParticipant
+                          ? onlineUsers.has(otherParticipant.userId)
+                          : false;
+                        const isDirectMessage =
+                          !selectedConversation.isGroup &&
+                          !selectedConversation.isBroadcast;
 
-                    const handleOpenUserDetails = () => {
-                      if (isDirectMessage && otherParticipant) {
-                        setSelectedUserForDetails(otherParticipant.user);
-                        setUserDetailsDialogOpen(true);
-                      }
-                    };
+                        const handleOpenUserDetails = () => {
+                          if (isDirectMessage && otherParticipant) {
+                            setSelectedUserForDetails(otherParticipant.user);
+                            setUserDetailsDialogOpen(true);
+                          }
+                        };
 
-                    return (
-                      <>
-                        <button
-                          onClick={handleOpenUserDetails}
-                          className={`flex items-center gap-3 flex-1 min-w-0 ${
-                            isDirectMessage ? 'hover-elevate active-elevate-2 rounded-md p-1 -ml-1' : ''
-                          }`}
-                          data-testid="button-chat-header"
-                        >
-                          <div className="relative flex-shrink-0">
-                            <Avatar
-                              className="h-10 w-10"
-                              data-testid="avatar-conversation-header"
+                        return (
+                          <>
+                            <button
+                              onClick={handleOpenUserDetails}
+                              className={`flex items-center gap-3 flex-1 min-w-0 ${
+                                isDirectMessage
+                                  ? "hover-elevate active-elevate-2 rounded-md p-1 -ml-1"
+                                  : ""
+                              }`}
+                              data-testid="button-chat-header"
                             >
-                              <AvatarImage
-                                src={
-                                  selectedConversation.avatarUrl ||
-                                  (!selectedConversation.isGroup &&
-                                    otherParticipant?.user.profileImageUrl) ||
-                                  undefined
-                                }
-                                style={{ objectFit: "cover" }}
-                              />
-                              <AvatarFallback>
+                              <div className="relative flex-shrink-0">
+                                <Avatar
+                                  className="h-10 w-10"
+                                  data-testid="avatar-conversation-header"
+                                >
+                                  <AvatarImage
+                                    src={
+                                      selectedConversation.avatarUrl ||
+                                      (!selectedConversation.isGroup &&
+                                        otherParticipant?.user
+                                          .profileImageUrl) ||
+                                      undefined
+                                    }
+                                    style={{ objectFit: "cover" }}
+                                  />
+                                  <AvatarFallback>
+                                    {selectedConversation.isGroup ? (
+                                      <Users className="h-5 w-5" />
+                                    ) : (
+                                      getUserDisplayName(
+                                        otherParticipant?.user || {}
+                                      )
+                                        .substring(0, 2)
+                                        .toUpperCase()
+                                    )}
+                                  </AvatarFallback>
+                                </Avatar>
+                                {!selectedConversation.isGroup &&
+                                  otherParticipant && (
+                                    <OnlineStatus
+                                      isOnline={isOnline}
+                                      className="absolute bottom-0 right-0"
+                                    />
+                                  )}
+                              </div>
+
+                              <div className="flex-1 min-w-0 text-left">
+                                <h2
+                                  className="font-semibold break-words line-clamp-2 leading-tight"
+                                  data-testid="text-conversation-header-name"
+                                >
+                                  {(selectedConversation.isGroup ||
+                                    selectedConversation.isBroadcast) &&
+                                  selectedConversation.name
+                                    ? selectedConversation.name
+                                    : otherParticipant
+                                    ? getUserDisplayName(otherParticipant.user)
+                                    : "Unknown"}
+                                </h2>
                                 {selectedConversation.isGroup ? (
-                                  <Users className="h-5 w-5" />
+                                  <span
+                                    className="text-xs text-muted-foreground hover:underline text-left cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setGroupSettingsDialogOpen(true);
+                                    }}
+                                    data-testid="button-view-members"
+                                  >
+                                    {selectedConversation.participants.length}{" "}
+                                    members
+                                  </span>
+                                ) : selectedConversation.isBroadcast ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {selectedConversation.participants.length}{" "}
+                                    members
+                                  </p>
                                 ) : (
-                                  getUserDisplayName(otherParticipant?.user || {})
-                                    .substring(0, 2)
-                                    .toUpperCase()
+                                  <p
+                                    className="text-xs text-muted-foreground"
+                                    data-testid="text-user-status"
+                                  >
+                                    {isOnline
+                                      ? "online"
+                                      : otherParticipant?.user.lastSeen
+                                      ? `last seen ${formatLastSeen(
+                                          otherParticipant.user.lastSeen
+                                        )}`
+                                      : "offline"}
+                                  </p>
                                 )}
-                              </AvatarFallback>
-                            </Avatar>
-                            {!selectedConversation.isGroup && otherParticipant && (
-                              <OnlineStatus
-                                isOnline={isOnline}
-                                className="absolute bottom-0 right-0"
-                              />
-                            )}
-                          </div>
-
-                          <div className="flex-1 min-w-0 text-left">
-                            <h2
-                              className="font-semibold break-words line-clamp-2 leading-tight"
-                              data-testid="text-conversation-header-name"
-                            >
-                              {(selectedConversation.isGroup ||
-                                selectedConversation.isBroadcast) &&
-                              selectedConversation.name
-                                ? selectedConversation.name
-                                : otherParticipant
-                                ? getUserDisplayName(otherParticipant.user)
-                                : "Unknown"}
-                            </h2>
-                            {selectedConversation.isGroup ? (
-                              <span
-                                className="text-xs text-muted-foreground hover:underline text-left cursor-pointer"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setGroupSettingsDialogOpen(true);
-                                }}
-                                data-testid="button-view-members"
-                              >
-                                {selectedConversation.participants.length} members
-                              </span>
-                            ) : selectedConversation.isBroadcast ? (
-                              <p className="text-xs text-muted-foreground">
-                                {selectedConversation.participants.length} members
-                              </p>
-                            ) : (
-                              <p
-                                className="text-xs text-muted-foreground"
-                                data-testid="text-user-status"
-                              >
-                                {isOnline
-                                  ? "online"
-                                  : otherParticipant?.user.lastSeen
-                                  ? `last seen ${formatLastSeen(otherParticipant.user.lastSeen)}`
-                                  : "offline"}
-                              </p>
-                            )}
-                          </div>
-                        </button>
-                      </>
-                    );
-                  })()}
-                </div>
+                              </div>
+                            </button>
+                          </>
+                        );
+                      })()}
+                    </div>
 
                     <div className="flex items-center gap-1">
                       <DisappearingMessagesSettings
                         conversation={selectedConversation}
                         onUpdateTimer={handleUpdateDisappearingTimer}
                       />
-                      {selectedConversation.isGroup && (
-                        user?.role === 'admin' || 
-                        user?.role === 'super_admin' ||
-                        selectedConversation.participants.some(
-                          p => p.userId === user?.id && p.role === 'admin'
-                        )
-                      ) && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setGroupSettingsDialogOpen(true)}
-                          data-testid="button-group-settings"
-                          title="Group Settings"
-                        >
-                          <Settings className="h-5 w-5" />
-                        </Button>
-                      )}
+                      {selectedConversation.isGroup &&
+                        (user?.role === "admin" ||
+                          user?.role === "super_admin" ||
+                          selectedConversation.participants.some(
+                            (p) => p.userId === user?.id && p.role === "admin"
+                          )) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setGroupSettingsDialogOpen(true)}
+                            data-testid="button-group-settings"
+                            title="Group Settings"
+                          >
+                            <Settings className="h-5 w-5" />
+                          </Button>
+                        )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1390,7 +1418,9 @@ export default function Home() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => setDeleteConversationDialogOpen(true)}
+                            onClick={() =>
+                              setDeleteConversationDialogOpen(true)
+                            }
                             className="text-destructive focus:text-destructive"
                             data-testid="menu-delete-conversation"
                           >
@@ -1407,93 +1437,97 @@ export default function Home() {
               {/* Messages Area */}
               <div className="relative flex-1 overflow-hidden">
                 <ScrollArea ref={scrollAreaRef} className="h-full p-4">
-                {messagesLoading ? (
-                  <div className="space-y-4">
-                    {[...Array(3)].map((_, i) => (
-                      <div
-                        key={i}
-                        className={`flex gap-2 ${
-                          i % 2 === 0 ? "flex-row" : "flex-row-reverse"
-                        }`}
-                      >
-                        <Skeleton className="h-8 w-8 rounded-full flex-shrink-0" />
-                        <div className="space-y-2 flex-1 max-w-[65%]">
-                          <Skeleton className="h-20 w-full rounded-2xl" />
+                  {messagesLoading ? (
+                    <div className="space-y-4">
+                      {[...Array(3)].map((_, i) => (
+                        <div
+                          key={i}
+                          className={`flex gap-2 ${
+                            i % 2 === 0 ? "flex-row" : "flex-row-reverse"
+                          }`}
+                        >
+                          <Skeleton className="h-8 w-8 rounded-full flex-shrink-0" />
+                          <div className="space-y-2 flex-1 max-w-[65%]">
+                            <Skeleton className="h-20 w-full rounded-2xl" />
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center">
-                    <MessageCircle className="h-16 w-16 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No messages yet</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Send a message to start the conversation
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4" data-testid="messages-container">
-                    {messages.map((message, index) => {
-                      const prevMessage = messages[index - 1];
-                      const showAvatar =
-                        !prevMessage ||
-                        prevMessage.senderId !== message.senderId;
+                      ))}
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center">
+                      <MessageCircle className="h-16 w-16 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">No messages yet</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Send a message to start the conversation
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4" data-testid="messages-container">
+                      {messages.map((message, index) => {
+                        const prevMessage = messages[index - 1];
+                        const showAvatar =
+                          !prevMessage ||
+                          prevMessage.senderId !== message.senderId;
 
-                      const showDateSeparator =
-                        !prevMessage ||
-                        new Date(message.createdAt!).toDateString() !==
-                          new Date(prevMessage.createdAt!).toDateString();
+                        const showDateSeparator =
+                          !prevMessage ||
+                          new Date(message.createdAt!).toDateString() !==
+                            new Date(prevMessage.createdAt!).toDateString();
 
-                      return (
-                        <div key={message.id}>
-                          {showDateSeparator && (
-                            <div
-                              className="flex items-center justify-center my-4"
-                              data-testid={`date-separator-${message.id}`}
-                            >
-                              <div className="px-3 py-1 rounded-full bg-muted text-xs text-muted-foreground">
-                                {formatDateSeparator(message.createdAt!)}
+                        return (
+                          <div key={message.id}>
+                            {showDateSeparator && (
+                              <div
+                                className="flex items-center justify-center my-4"
+                                data-testid={`date-separator-${message.id}`}
+                              >
+                                <div className="px-3 py-1 rounded-full bg-muted text-xs text-muted-foreground">
+                                  {formatDateSeparator(message.createdAt!)}
+                                </div>
                               </div>
-                            </div>
-                          )}
-                          <ChatMessage
-                            message={message}
-                            isOwn={message.senderId === user?.id}
-                            showAvatar={showAvatar}
-                            isGroup={selectedConversation.isGroup}
-                            currentUserId={user?.id || ""}
-                            conversationId={selectedConversationId || ""}
-                            onAddReaction={handleAddReaction}
-                            onRemoveReaction={handleRemoveReaction}
-                            onReply={handleReply}
-                            onEdit={handleEdit}
-                            onForward={handleForward}
-                            onDelete={handleDelete}
-                            onJumpToMessage={handleJumpToMessage}
-                            isEditing={editingMessageId === message.id}
-                            editContent={editContent}
-                            onEditContentChange={setEditContent}
-                            onSaveEdit={() => handleSaveEdit(message.id)}
-                            onCancelEdit={handleCancelEdit}
-                            isSelectionMode={isSelectionMode}
-                            isSelected={selectedMessages.has(message.id)}
-                            onToggleSelect={() => handleToggleSelect(message.id)}
-                            onEnterSelectionMode={() => handleEnterSelectionMode(message)}
-                          />
-                        </div>
-                      );
-                    })}
-                    <div ref={messagesEndRef} />
-                  </div>
-                )}
-              </ScrollArea>
+                            )}
+                            <ChatMessage
+                              message={message}
+                              isOwn={message.senderId === user?.id}
+                              showAvatar={showAvatar}
+                              isGroup={selectedConversation.isGroup}
+                              currentUserId={user?.id || ""}
+                              conversationId={selectedConversationId || ""}
+                              onAddReaction={handleAddReaction}
+                              onRemoveReaction={handleRemoveReaction}
+                              onReply={handleReply}
+                              onEdit={handleEdit}
+                              onForward={handleForward}
+                              onDelete={handleDelete}
+                              onJumpToMessage={handleJumpToMessage}
+                              isEditing={editingMessageId === message.id}
+                              editContent={editContent}
+                              onEditContentChange={setEditContent}
+                              onSaveEdit={() => handleSaveEdit(message.id)}
+                              onCancelEdit={handleCancelEdit}
+                              isSelectionMode={isSelectionMode}
+                              isSelected={selectedMessages.has(message.id)}
+                              onToggleSelect={() =>
+                                handleToggleSelect(message.id)
+                              }
+                              onEnterSelectionMode={() =>
+                                handleEnterSelectionMode(message)
+                              }
+                            />
+                          </div>
+                        );
+                      })}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  )}
+                </ScrollArea>
 
                 {/* Scroll to Bottom Button */}
                 {showScrollToBottom && !isSelectionMode && (
                   <Button
                     size="icon"
                     onClick={scrollToBottom}
-                    className="absolute bottom-4 right-4 rounded-full shadow-lg z-10"
+                    className="absolute bottom-12 left-4 rounded-full shadow-lg z-10"
                     data-testid="button-scroll-to-bottom"
                   >
                     <ChevronDown className="h-5 w-5" />
@@ -1502,9 +1536,10 @@ export default function Home() {
               </div>
 
               {/* Typing Indicator */}
-              {!isSelectionMode && getTypingUsersInConversation().length > 0 && (
-                <TypingIndicator userNames={getTypingUsersInConversation()} />
-              )}
+              {!isSelectionMode &&
+                getTypingUsersInConversation().length > 0 && (
+                  <TypingIndicator userNames={getTypingUsersInConversation()} />
+                )}
 
               {/* Selection Toolbar - WhatsApp Style */}
               {isSelectionMode && (
@@ -1535,6 +1570,7 @@ export default function Home() {
               {/* Message Composer */}
               {!isSelectionMode && (
                 <MessageComposer
+                  key={selectedConversationId}
                   onSendMessage={handleSendMessage}
                   onTyping={handleTyping}
                   disabled={sendMessageMutation.isPending}
@@ -1595,10 +1631,10 @@ export default function Home() {
           onOpenChange={setGroupSettingsDialogOpen}
           conversationId={selectedConversation.id}
           isAdmin={
-            user?.role === 'admin' || 
-            user?.role === 'super_admin' ||
+            user?.role === "admin" ||
+            user?.role === "super_admin" ||
             selectedConversation.participants.some(
-              p => p.userId === user?.id && p.role === 'admin'
+              (p) => p.userId === user?.id && p.role === "admin"
             )
           }
           currentUserId={user?.id || ""}

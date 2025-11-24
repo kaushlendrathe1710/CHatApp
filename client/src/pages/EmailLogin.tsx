@@ -2,7 +2,13 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { MessageSquare } from "lucide-react";
@@ -15,7 +21,7 @@ export default function EmailLogin() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast({
         title: "Invalid email",
@@ -27,7 +33,9 @@ export default function EmailLogin() {
 
     setIsLoading(true);
     try {
-      const response = await apiRequest("POST", "/api/auth/request-otp", { email });
+      const response = await apiRequest("POST", "/api/auth/request-otp", {
+        email,
+      });
 
       if (response.ok) {
         toast({
