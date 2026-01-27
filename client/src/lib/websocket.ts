@@ -1,12 +1,31 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { apiRequest } from './queryClient';
+import { useEffect, useRef, useCallback } from "react";
+import { apiRequest } from "./queryClient";
 
 export type WebSocketMessage = {
-  type: 'message' | 'typing' | 'presence' | 'status_update' | 'join_conversations' | 'reaction_added' | 'message_edited' | 'message_deleted' | 'settings_updated' | 'conversation_updated' | 'call_initiate' | 'call_signal' | 'call_end' | 'encryption_key_added';
+  type:
+    | "message"
+    | "typing"
+    | "presence"
+    | "status_update"
+    | "join_conversations"
+    | "reaction_added"
+    | "message_edited"
+    | "message_deleted"
+    | "settings_updated"
+    | "conversation_updated"
+    | "call_initiate"
+    | "call_signal"
+    | "call_end"
+    | "call_rejected"
+    | "encryption_key_added";
   data: any;
 };
 
-export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, conversationIds?: string[], userId?: string) {
+export function useWebSocket(
+  onMessage?: (message: WebSocketMessage) => void,
+  conversationIds?: string[],
+  userId?: string
+) {
   const eventSourceRef = useRef<EventSource | null>(null);
   const clientIdRef = useRef<string | null>(null);
   const conversationIdsRef = useRef(conversationIds);
@@ -31,42 +50,44 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
     // This ensures subscriptions are removed when access is revoked
     // IMPORTANT: Allow empty arrays to clear subscriptions on revocation
     subscribedConversationsRef.current = new Set(convIds);
-    
-    return apiRequest('POST', '/api/events/subscribe', {
-      clientId: clientIdRef.current,  // Fixed: include key name
-      conversationIds: convIds  // Send authoritative list (even if empty)
-    }).then(() => {
-      console.log('[SSE] Subscribed to', convIds.length, 'conversations');
-    }).catch(err => {
-      console.error('[SSE] Subscribe error:', err);
-    });
+
+    return apiRequest("POST", "/api/events/subscribe", {
+      clientId: clientIdRef.current, // Fixed: include key name
+      conversationIds: convIds, // Send authoritative list (even if empty)
+    })
+      .then(() => {
+        console.log("[SSE] Subscribed to", convIds.length, "conversations");
+      })
+      .catch((err) => {
+        console.error("[SSE] Subscribe error:", err);
+      });
   }, []);
 
   const connect = useCallback(() => {
     if (eventSourceRef.current) {
       const state = eventSourceRef.current.readyState;
       if (state === EventSource.CONNECTING || state === EventSource.OPEN) {
-        console.log('[SSE] Already connected or connecting, skipping');
+        console.log("[SSE] Already connected or connecting, skipping");
         return;
       }
     }
 
     if (isConnectingRef.current) {
-      console.log('[SSE] Connection already in progress, skipping');
+      console.log("[SSE] Connection already in progress, skipping");
       return;
     }
 
     isConnectingRef.current = true;
-    console.log('[SSE] Connecting...');
-    
-    const eventSource = new EventSource('/api/events');
+    console.log("[SSE] Connecting...");
 
-    eventSource.addEventListener('connected', (e) => {
+    const eventSource = new EventSource("/api/events");
+
+    eventSource.addEventListener("connected", (e) => {
       const data = JSON.parse(e.data);
       clientIdRef.current = data.clientId;
       isConnectingRef.current = false;
-      console.log('[SSE] Connected successfully, clientId:', data.clientId);
-      
+      console.log("[SSE] Connected successfully, clientId:", data.clientId);
+
       setTimeout(() => {
         // Always subscribe (even with empty array) to clear revoked subscriptions
         if (conversationIdsRef.current !== undefined) {
@@ -75,104 +96,111 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
       }, 100);
     });
 
-    eventSource.addEventListener('message', (e) => {
+    eventSource.addEventListener("message", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'message', data });
+        onMessage({ type: "message", data });
       }
     });
 
-    eventSource.addEventListener('typing', (e) => {
+    eventSource.addEventListener("typing", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'typing', data });
+        onMessage({ type: "typing", data });
       }
     });
 
-    eventSource.addEventListener('presence', (e) => {
+    eventSource.addEventListener("presence", (e) => {
       const data = JSON.parse(e.data);
-      console.log('[SSE] Received presence:', data);
+      console.log("[SSE] Received presence:", data);
       if (onMessage) {
-        onMessage({ type: 'presence', data });
+        onMessage({ type: "presence", data });
       }
     });
 
-    eventSource.addEventListener('status_update', (e) => {
+    eventSource.addEventListener("status_update", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'status_update', data });
+        onMessage({ type: "status_update", data });
       }
     });
 
-    eventSource.addEventListener('reaction_added', (e) => {
+    eventSource.addEventListener("reaction_added", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'reaction_added', data });
+        onMessage({ type: "reaction_added", data });
       }
     });
 
-    eventSource.addEventListener('message_edited', (e) => {
+    eventSource.addEventListener("message_edited", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'message_edited', data });
+        onMessage({ type: "message_edited", data });
       }
     });
 
-    eventSource.addEventListener('message_deleted', (e) => {
+    eventSource.addEventListener("message_deleted", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'message_deleted', data });
+        onMessage({ type: "message_deleted", data });
       }
     });
 
-    eventSource.addEventListener('settings_updated', (e) => {
+    eventSource.addEventListener("settings_updated", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'settings_updated', data });
+        onMessage({ type: "settings_updated", data });
       }
     });
 
-    eventSource.addEventListener('conversation_updated', (e) => {
+    eventSource.addEventListener("conversation_updated", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'conversation_updated', data });
+        onMessage({ type: "conversation_updated", data });
       }
     });
 
-    eventSource.addEventListener('call_signal', (e) => {
+    eventSource.addEventListener("call_signal", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'call_signal', data });
+        onMessage({ type: "call_signal", data });
       }
     });
 
-    eventSource.addEventListener('call_initiate', (e) => {
+    eventSource.addEventListener("call_initiate", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'call_initiate', data });
+        onMessage({ type: "call_initiate", data });
       }
     });
 
-    eventSource.addEventListener('call_end', (e) => {
+    eventSource.addEventListener("call_end", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'call_end', data });
+        onMessage({ type: "call_end", data });
       }
     });
 
-    eventSource.addEventListener('encryption_key_added', (e) => {
+    eventSource.addEventListener("call_rejected", (e) => {
       const data = JSON.parse(e.data);
       if (onMessage) {
-        onMessage({ type: 'encryption_key_added', data });
+        onMessage({ type: "call_rejected", data });
       }
     });
 
-    eventSource.addEventListener('ping', () => {
+    eventSource.addEventListener("encryption_key_added", (e) => {
+      const data = JSON.parse(e.data);
+      if (onMessage) {
+        onMessage({ type: "encryption_key_added", data });
+      }
+    });
+
+    eventSource.addEventListener("ping", () => {
       // Server heartbeat
     });
 
     eventSource.onerror = () => {
-      console.error('[SSE] Connection error, will auto-reconnect');
+      console.error("[SSE] Connection error, will auto-reconnect");
       isConnectingRef.current = false;
       // DON'T clear subscriptions - we need to re-send the full list on reconnect
       // subscribedConversationsRef.current.clear();
@@ -183,8 +211,10 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
   }, [onMessage, subscribe]);
 
   const sendMessage = useCallback((message: WebSocketMessage) => {
-    if (message.type === 'typing') {
-      apiRequest('POST', '/api/events/typing', message.data).catch(err => console.error('[SSE] Typing error:', err));
+    if (message.type === "typing") {
+      apiRequest("POST", "/api/events/typing", message.data).catch((err) =>
+        console.error("[SSE] Typing error:", err)
+      );
     }
   }, []);
 
@@ -209,23 +239,30 @@ export function useWebSocket(onMessage?: (message: WebSocketMessage) => void, co
 
   useEffect(() => {
     // Always subscribe (even with empty array) to clear revoked subscriptions
-    if (eventSourceRef.current && eventSourceRef.current.readyState === EventSource.OPEN && conversationIds !== undefined && clientIdRef.current) {
+    if (
+      eventSourceRef.current &&
+      eventSourceRef.current.readyState === EventSource.OPEN &&
+      conversationIds !== undefined &&
+      clientIdRef.current
+    ) {
       // Guard: Only subscribe if the conversation IDs have actually changed (use Set comparison for stable identity)
       const currentSet = new Set(conversationIds);
       const previousSet = subscribedConversationsRef.current;
-      
+
       // Check if the sets are different (size or content)
-      if (currentSet.size !== previousSet.size || 
-          !Array.from(currentSet).every(id => previousSet.has(id))) {
+      if (
+        currentSet.size !== previousSet.size ||
+        !Array.from(currentSet).every((id) => previousSet.has(id))
+      ) {
         subscribe(conversationIds);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationIds]); // Only re-subscribe when conversationIds change, not when subscribe changes
 
-  return { 
-    sendMessage, 
-    disconnect, 
-    isConnected: eventSourceRef.current?.readyState === EventSource.OPEN 
+  return {
+    sendMessage,
+    disconnect,
+    isConnected: eventSourceRef.current?.readyState === EventSource.OPEN,
   };
 }

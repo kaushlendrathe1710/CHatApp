@@ -73,48 +73,22 @@ export const MessageComposer = React.memo(function MessageComposer({
     mimeType: string;
     type: "image" | "video" | "document" | "audio";
   } | null>(null);
-  const [focusReason, setFocusReason] = useState<
-    "mount" | "reply" | "send" | null
-  >(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
+  // Always keep focus on textarea - runs on every render
+  useLayoutEffect(() => {
+    if (textareaRef.current && !disabled && document.hasFocus()) {
+      textareaRef.current.focus();
+    }
+  });
+
   // Initial mount focus
   useEffect(() => {
-    setFocusReason("mount");
-  }, []);
-
-  // Focus after message is sent
-  useEffect(() => {
-    if (focusAfterSend) {
-      setFocusReason("send");
+    if (textareaRef.current && !disabled) {
+      textareaRef.current.focus();
     }
-  }, [focusAfterSend]);
-
-  useEffect(() => {
-    if (replyToMessage) {
-      setFocusReason("reply");
-    }
-  }, [replyToMessage]);
-
-  // Focus AFTER textarea is fully positioned in DOM
-  useLayoutEffect(() => {
-    if (!textareaRef.current || disabled) return;
-
-    const shouldFocus =
-      focusReason === "mount" ||
-      focusReason === "send" ||
-      (focusReason === "reply" && replyToMessage);
-
-    if (!shouldFocus) return;
-
-    // Keep consistent height + apply focus
-    textareaRef.current.style.height = "auto";
-    textareaRef.current.focus();
-
-    setFocusReason(null);
-    setFocusAfterSend(false);
-  }, [focusReason, disabled, replyToMessage]);
+  }, [disabled]);
 
   const handleSend = () => {
     // Allow sending if message has content OR if file is attached
@@ -596,6 +570,7 @@ export const MessageComposer = React.memo(function MessageComposer({
             placeholder={placeholder}
             className="min-h-[44px] max-h-32 resize-none text-base"
             rows={1}
+            autoFocus
             data-testid="input-message"
           />
         </div>
