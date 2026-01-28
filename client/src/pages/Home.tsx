@@ -51,6 +51,7 @@ import { CreateGroupDialog } from "@/components/CreateGroupDialog";
 import { GroupSettingsDialog } from "@/components/GroupSettingsDialog";
 import { EncryptionSetupDialog } from "@/components/EncryptionSetupDialog";
 import { VideoCallDialog } from "@/components/VideoCallDialog";
+import { AudioCallDialog } from "@/components/AudioCallDialog";
 import { UserDetailsDialog } from "@/components/UserDetailsDialog";
 import {
   getUserDisplayName,
@@ -105,9 +106,10 @@ export default function Home() {
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
   >(null);
+  const [conversationClickCount, setConversationClickCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [typingUsers, setTypingUsers] = useState<Map<string, Set<string>>>(
-    new Map()
+    new Map(),
   );
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -123,21 +125,25 @@ export default function Home() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
+  const [audioCallDialogOpen, setAudioCallDialogOpen] = useState(false);
   const [userDetailsDialogOpen, setUserDetailsDialogOpen] = useState(false);
   const [selectedUserForDetails, setSelectedUserForDetails] =
     useState<User | null>(null);
   const [callType, setCallType] = useState<"audio" | "video">("audio");
   const [isCallInitiator, setIsCallInitiator] = useState(false);
   const [incomingCallSignal, setIncomingCallSignal] = useState<any>(null);
+  const [incomingCallConversationId, setIncomingCallConversationId] = useState<
+    string | null
+  >(null);
   const [deleteConversationDialogOpen, setDeleteConversationDialogOpen] =
     useState(false);
   const [isEncryptionEnabled, setIsEncryptionEnabled] = useState(false);
   const [peerPublicKeys, setPeerPublicKeys] = useState<Record<string, string>>(
-    {}
+    {},
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -155,7 +161,7 @@ export default function Home() {
   // Memoize conversation IDs to prevent infinite subscribe loop
   const conversationIds = useMemo(
     () => conversations?.map((c) => c.id) || [],
-    [conversations]
+    [conversations],
   );
 
   // WebSocket connection with error handling
@@ -173,7 +179,7 @@ export default function Home() {
           // Show browser notification if message is from another user
           if (message.data.senderId !== user?.id) {
             const conversation = conversations.find(
-              (c) => c.id === message.data.conversationId
+              (c) => c.id === message.data.conversationId,
             );
 
             let conversationName = "";
@@ -182,7 +188,7 @@ export default function Home() {
 
             if (conversation) {
               const sender = conversation.participants.find(
-                (p) => p.userId === message.data.senderId
+                (p) => p?.userId === message.data.senderId,
               );
 
               senderName = sender ? getUserDisplayName(sender.user) : "Someone";
@@ -295,7 +301,7 @@ export default function Home() {
               // Only update if cache already exists, otherwise let query fetch normally
               if (!oldMessages) return undefined;
               return oldMessages.filter((msg) => msg.id !== messageId);
-            }
+            },
           );
 
           // Invalidate conversations to update last message preview
@@ -310,8 +316,8 @@ export default function Home() {
               oldConversations?.map((conv) =>
                 conv.id === conversationId
                   ? { ...conv, disappearingMessagesTimer }
-                  : conv
-              ) || []
+                  : conv,
+              ) || [],
           );
         } else if (message.type === "conversation_updated") {
           // Update conversation name in cache
@@ -321,8 +327,8 @@ export default function Home() {
             ["/api/conversations"],
             (oldConversations) =>
               oldConversations?.map((conv) =>
-                conv.id === conversationId ? { ...conv, name } : conv
-              ) || []
+                conv.id === conversationId ? { ...conv, name } : conv,
+              ) || [],
           );
 
           // Also invalidate single conversation query
@@ -331,18 +337,88 @@ export default function Home() {
           });
         } else if (message.type === "call_initiate") {
           // Incoming call
-          const { conversationId, callType: incomingCallType } = message.data;
-          if (conversationId === selectedConversationId) {
-            setCallType(incomingCallType);
-            setIsCallInitiator(false);
+          const {
+            conversationId,
+            callType: incomingCallType,
+            callerName,
+          } = message.data;
+          console.log("call_initiated message: ", message.data);
+
+          // Store the incoming call conversation ID
+          setIncomingCallConversationId(conversationId);
+          setCallType(incomingCallType);
+          setIsCallInitiator(false);
+
+          // Open appropriate dialog based on call type
+          if (incomingCallType === "audio") {
+            setAudioCallDialogOpen(true);
+          } else {
             setCallDialogOpen(true);
           }
+
+          // Show notification for incoming call
+          toast({
+            title: `Incoming ${incomingCallType} call`,
+            description: `${callerName || "Someone"} is calling...`,
+            action:
+              incomingCallType === "audio" ? (
+                <ToastAction
+                  altText="Answer"
+                  onClick={() => {
+                    setAudioCallDialogOpen(true);
+                    // Switch to the conversation
+                    setSelectedConversationId(conversationId);
+                  }}
+                >
+                  Answer
+                </ToastAction>
+              ) : (
+                <ToastAction
+                  altText="Answer"
+                  onClick={() => {
+                    setCallDialogOpen(true);
+                    // Switch to the conversation
+                    setSelectedConversationId(conversationId);
+                  }}
+                >
+                  Answer
+                </ToastAction>
+              ),
+          });
         } else if (message.type === "call_signal") {
-          // WebRTC signaling
-          setIncomingCallSignal(message.data.signal);
+          // WebRTC signaling - add timestamp to force React update
+          console.log(
+            "[Home] 📡 Received call_signal:",
+            message.data.signal.type,
+            "for conversation:",
+            message.data.conversationId,
+          );
+          console.log(
+            "[Home] Current dialog state - audioCallDialogOpen:",
+            audioCallDialogOpen,
+            "isCallInitiator:",
+            isCallInitiator,
+          );
+          setIncomingCallSignal({
+            ...message.data.signal,
+            _timestamp: Date.now(),
+          });
         } else if (message.type === "call_end") {
           // Call ended by other party
           setCallDialogOpen(false);
+          setAudioCallDialogOpen(false);
+          setIncomingCallConversationId(null);
+        } else if (message.type === "call_rejected") {
+          // Call rejected by other party
+          setCallDialogOpen(false);
+          setAudioCallDialogOpen(false);
+          setIncomingCallConversationId(null);
+
+          toast({
+            title: "Call Declined",
+            description: "The person you're calling declined the call",
+            variant: "destructive",
+          });
         } else if (message.type === "encryption_key_added") {
           // Encryption key added to conversation
           if (message.data.conversationId === selectedConversationId) {
@@ -354,7 +430,7 @@ export default function Home() {
       }
     },
     conversationIds,
-    user?.id
+    user?.id,
   );
 
   // Fetch messages for selected conversation (no polling, only WebSocket updates)
@@ -393,7 +469,7 @@ export default function Home() {
   });
 
   const selectedConversation = conversations.find(
-    (c) => c.id === selectedConversationId
+    (c) => c.id === selectedConversationId,
   );
 
   // Request notification permission on mount
@@ -548,7 +624,7 @@ export default function Home() {
       return apiRequest(
         "DELETE",
         `/api/conversations/${conversationId}`,
-        undefined
+        undefined,
       );
     },
     onSuccess: () => {
@@ -588,7 +664,7 @@ export default function Home() {
   // Handle scroll to detect if user is at bottom
   useEffect(() => {
     const scrollViewport = scrollAreaRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]"
+      "[data-radix-scroll-area-viewport]",
     );
     if (!scrollViewport) return;
 
@@ -649,7 +725,7 @@ export default function Home() {
         mediaObjectKey: string;
         mimeType: string;
         type: "image" | "video" | "document" | "audio";
-      }
+      },
     ) => {
       let finalContent = content;
       let isEncrypted = false;
@@ -669,12 +745,12 @@ export default function Home() {
           try {
             // Get the other user's public key
             const otherUser = selectedConversation.participants.find(
-              (p) => p.userId !== user?.id
+              (p) => p?.userId !== user?.id,
             );
             if (otherUser && peerPublicKeys[otherUser.userId]) {
               finalContent = await encryptMessage(
                 content,
-                peerPublicKeys[otherUser.userId]
+                peerPublicKeys[otherUser.userId],
               );
               isEncrypted = true;
             }
@@ -711,7 +787,7 @@ export default function Home() {
       replyToMessage,
       sendMessageMutation.mutate,
       toast,
-    ]
+    ],
   );
 
   const handleReply = (message: MessageWithSender) => {
@@ -730,7 +806,7 @@ export default function Home() {
   const handleJumpToMessage = (messageId: string) => {
     // Find the message element
     const messageElement = document.querySelector(
-      `[data-message-id="${messageId}"]`
+      `[data-message-id="${messageId}"]`,
     );
 
     if (messageElement) {
@@ -820,8 +896,8 @@ export default function Home() {
     try {
       await Promise.all(
         Array.from(selectedMessages).map((messageId) =>
-          apiRequest("DELETE", `/api/messages/${messageId}`)
-        )
+          apiRequest("DELETE", `/api/messages/${messageId}`),
+        ),
       );
 
       queryClient.invalidateQueries({
@@ -881,7 +957,7 @@ export default function Home() {
         `/api/conversations/${selectedConversationId}/settings`,
         {
           disappearingMessagesTimer: timerMs,
-        }
+        },
       );
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       toast({
@@ -893,8 +969,8 @@ export default function Home() {
                 timerMs === 86400000
                   ? "24 hours"
                   : timerMs === 604800000
-                  ? "7 days"
-                  : "90 days"
+                    ? "7 days"
+                    : "90 days"
               }`,
       });
     } catch (error) {
@@ -940,11 +1016,11 @@ export default function Home() {
     const userIds = typingUsers.get(selectedConversationId);
     if (!userIds) return [];
 
-    return Array.from(userIds)
+        return Array.from(userIds)
       .filter((id) => id !== user.id)
       .map((id) => {
         const participant = selectedConversation?.participants.find(
-          (p) => p.userId === id
+          (p) => p?.userId === id,
         );
         return participant ? getUserDisplayName(participant.user) : "Someone";
       });
@@ -953,14 +1029,14 @@ export default function Home() {
   const filteredConversations = conversations.filter((conv) => {
     if (!searchQuery) return true;
     const otherParticipants = conv.participants.filter(
-      (p) => p.userId !== user?.id
+      (p) => p?.userId !== user?.id,
     );
     const name =
       (conv.isGroup || conv.isBroadcast) && conv.name
         ? conv.name
         : otherParticipants.length > 0
-        ? getUserDisplayName(otherParticipants[0].user)
-        : "";
+          ? getUserDisplayName(otherParticipants[0].user)
+          : "";
     return name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
@@ -1170,8 +1246,9 @@ export default function Home() {
             ) : (
               <div data-testid="conversations-list">
                 {filteredConversations.map((conversation) => {
+                  const currentUserId = user?.id || "";
                   const otherUserId = conversation.participants.find(
-                    (p) => p.userId !== user!.id
+                    (p) => p?.userId !== currentUserId,
                   )?.userId;
                   const isOnline = otherUserId
                     ? onlineUsers.has(otherUserId)
@@ -1181,11 +1258,12 @@ export default function Home() {
                     <ConversationListItem
                       key={conversation.id}
                       conversation={conversation}
-                      currentUserId={user!.id}
+                      currentUserId={currentUserId}
                       isActive={conversation.id === selectedConversationId}
                       isOnline={!conversation.isGroup ? isOnline : undefined}
                       onClick={() => {
                         setSelectedConversationId(conversation.id);
+                        setConversationClickCount((prev) => prev + 1);
                         setIsMobileMenuOpen(false);
                       }}
                     />
@@ -1244,7 +1322,7 @@ export default function Home() {
                       {(() => {
                         const otherParticipant =
                           selectedConversation.participants.find(
-                            (p) => p.userId !== user?.id
+                            (p) => p?.userId !== user?.id,
                           );
                         const isOnline = otherParticipant
                           ? onlineUsers.has(otherParticipant.userId)
@@ -1291,7 +1369,7 @@ export default function Home() {
                                       <Users className="h-5 w-5" />
                                     ) : (
                                       getUserDisplayName(
-                                        otherParticipant?.user || {}
+                                        otherParticipant?.user || {},
                                       )
                                         .substring(0, 2)
                                         .toUpperCase()
@@ -1317,8 +1395,10 @@ export default function Home() {
                                   selectedConversation.name
                                     ? selectedConversation.name
                                     : otherParticipant
-                                    ? getUserDisplayName(otherParticipant.user)
-                                    : "Unknown"}
+                                      ? getUserDisplayName(
+                                          otherParticipant.user,
+                                        )
+                                      : "Unknown"}
                                 </h2>
                                 {selectedConversation.isGroup ? (
                                   <span
@@ -1345,10 +1425,10 @@ export default function Home() {
                                     {isOnline
                                       ? "online"
                                       : otherParticipant?.user.lastSeen
-                                      ? `last seen ${formatLastSeen(
-                                          otherParticipant.user.lastSeen
-                                        )}`
-                                      : "offline"}
+                                        ? `last seen ${formatLastSeen(
+                                            otherParticipant.user.lastSeen,
+                                          )}`
+                                        : "offline"}
                                   </p>
                                 )}
                               </div>
@@ -1367,7 +1447,7 @@ export default function Home() {
                         (user?.role === "admin" ||
                           user?.role === "super_admin" ||
                           selectedConversation.participants.some(
-                            (p) => p.userId === user?.id && p.role === "admin"
+                            (p) => p?.userId === user?.id && p?.role === "admin",
                           )) && (
                           <Button
                             variant="ghost"
@@ -1382,38 +1462,52 @@ export default function Home() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
+                        onClick={async () => {
                           setCallType("audio");
                           setIsCallInitiator(true);
-                          setCallDialogOpen(true);
-                          sendWsMessage({
-                            type: "call_initiate",
-                            data: {
+                          setAudioCallDialogOpen(true);
+                          try {
+                            await apiRequest("POST", "/api/call/initiate", {
                               conversationId: selectedConversationId,
                               callType: "audio",
-                            },
-                          } as any);
+                            });
+                          } catch (error) {
+                            console.error("Failed to initiate call:", error);
+                            toast({
+                              title: "Call Failed",
+                              description: "Failed to initiate call",
+                              variant: "destructive",
+                            });
+                          }
                         }}
                         data-testid="button-voice-call"
+                        title="Audio call"
                       >
                         <Phone className="h-5 w-5" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
+                        onClick={async () => {
                           setCallType("video");
                           setIsCallInitiator(true);
                           setCallDialogOpen(true);
-                          sendWsMessage({
-                            type: "call_initiate",
-                            data: {
+                          try {
+                            await apiRequest("POST", "/api/call/initiate", {
                               conversationId: selectedConversationId,
                               callType: "video",
-                            },
-                          } as any);
+                            });
+                          } catch (error) {
+                            console.error("Failed to initiate call:", error);
+                            toast({
+                              title: "Call Failed",
+                              description: "Failed to initiate call",
+                              variant: "destructive",
+                            });
+                          }
                         }}
                         data-testid="button-video-call"
+                        title="Video call"
                       >
                         <Video className="h-5 w-5" />
                       </Button>
@@ -1597,7 +1691,7 @@ export default function Home() {
               {/* Message Composer */}
               {!isSelectionMode && (
                 <MessageComposer
-                  key={selectedConversationId}
+                  key={`${selectedConversationId}-${conversationClickCount}`}
                   onSendMessage={handleSendMessage}
                   onTyping={handleTyping}
                   disabled={sendMessageMutation.isPending}
@@ -1661,7 +1755,7 @@ export default function Home() {
             user?.role === "admin" ||
             user?.role === "super_admin" ||
             selectedConversation.participants.some(
-              (p) => p.userId === user?.id && p.role === "admin"
+              (p) => p?.userId === user?.id && p?.role === "admin",
             )
           }
           currentUserId={user?.id || ""}
@@ -1675,31 +1769,122 @@ export default function Home() {
         onEncryptionEnabled={() => setIsEncryptionEnabled(true)}
       />
 
-      {selectedConversationId && (
-        <VideoCallDialog
-          open={callDialogOpen}
-          onOpenChange={setCallDialogOpen}
-          conversationId={selectedConversationId}
-          isInitiator={isCallInitiator}
-          callType={callType}
-          onSignal={(signal) => {
-            sendWsMessage({
-              type: "call_signal",
-              data: { conversationId: selectedConversationId, signal },
-            } as any);
-          }}
-          incomingSignal={incomingCallSignal}
-          callerName={
-            selectedConversation?.isGroup
-              ? selectedConversation.name || "Group"
-              : getUserDisplayName(
-                  selectedConversation?.participants.find(
-                    (p) => p.userId !== user?.id
-                  )?.user || {}
-                )
-          }
-          ws={null}
-        />
+      {(selectedConversationId || incomingCallConversationId) && (
+        <>
+          {/* Audio Call Dialog */}
+          <AudioCallDialog
+            open={audioCallDialogOpen}
+            onOpenChange={(open) => {
+              setAudioCallDialogOpen(open);
+              if (!open) {
+                setIncomingCallConversationId(null);
+              }
+            }}
+            conversationId={
+              incomingCallConversationId || selectedConversationId || ""
+            }
+            isInitiator={isCallInitiator}
+            onSignal={async (signal) => {
+              const convId =
+                incomingCallConversationId || selectedConversationId;
+              console.log(
+                "[Home] 📤 onSignal callback - Sending",
+                signal.type,
+                "signal to conversation:",
+                convId,
+              );
+              try {
+                await apiRequest("POST", "/api/call/signal", {
+                  conversationId: convId,
+                  signal,
+                });
+                console.log("[Home] ✅ Signal sent successfully");
+              } catch (error) {
+                console.error("[Home] ❌ Failed to send signal:", error);
+              }
+            }}
+            incomingSignal={incomingCallSignal}
+            callerName={(() => {
+              const callConvId =
+                incomingCallConversationId || selectedConversationId;
+              const conversation = conversations.find(
+                (c) => c.id === callConvId,
+              );
+              if (conversation?.isGroup) {
+                return conversation.name || "Group";
+              }
+              return getUserDisplayName(
+                conversation?.participants.find((p) => p?.userId !== user?.id)
+                  ?.user || {},
+              );
+            })()}
+            callerAvatar={(() => {
+              const callConvId =
+                incomingCallConversationId || selectedConversationId;
+              const conversation = conversations.find(
+                (c) => c.id === callConvId,
+              );
+              if (conversation?.isGroup) {
+                return conversation.avatarUrl || undefined;
+              }
+              return (
+                conversation?.participants.find((p) => p?.userId !== user?.id)
+                  ?.user.profileImageUrl || undefined
+              );
+            })()}
+          />
+
+          {/* Video Call Dialog */}
+          <VideoCallDialog
+            open={callDialogOpen}
+            onOpenChange={(open) => {
+              setCallDialogOpen(open);
+              if (!open) {
+                setIncomingCallConversationId(null);
+              }
+            }}
+            conversationId={
+              incomingCallConversationId || selectedConversationId || ""
+            }
+            isInitiator={isCallInitiator}
+            callType={callType}
+            onSignal={async (signal) => {
+              const convId =
+                incomingCallConversationId || selectedConversationId;
+              console.log(
+                "[Home] 📤 onSignal callback (Video) - Sending",
+                signal.type,
+                "signal to conversation:",
+                convId,
+              );
+              try {
+                await apiRequest("POST", "/api/call/signal", {
+                  conversationId: convId,
+                  signal,
+                });
+                console.log("[Home] ✅ Video signal sent successfully");
+              } catch (error) {
+                console.error("[Home] ❌ Failed to send video signal:", error);
+              }
+            }}
+            incomingSignal={incomingCallSignal}
+            callerName={(() => {
+              const callConvId =
+                incomingCallConversationId || selectedConversationId;
+              const conversation = conversations.find(
+                (c) => c.id === callConvId,
+              );
+              if (conversation?.isGroup) {
+                return conversation.name || "Group";
+              }
+              return getUserDisplayName(
+                conversation?.participants.find((p) => p?.userId !== user?.id)
+                  ?.user || {},
+              );
+            })()}
+            ws={null}
+          />
+        </>
       )}
 
       {selectedUserForDetails && (
@@ -1708,18 +1893,32 @@ export default function Home() {
           onOpenChange={setUserDetailsDialogOpen}
           user={selectedUserForDetails}
           isOnline={onlineUsers.has(selectedUserForDetails.id)}
-          onStartCall={(type) => {
+          onStartCall={async (type) => {
             setCallType(type);
             setIsCallInitiator(true);
-            setCallDialogOpen(true);
+
+            // Open appropriate dialog based on call type
+            if (type === "audio") {
+              setAudioCallDialogOpen(true);
+            } else {
+              setCallDialogOpen(true);
+            }
+
+            // Initiate call via API
             if (selectedConversationId) {
-              sendWsMessage({
-                type: "call_initiate",
-                data: {
+              try {
+                await apiRequest("POST", "/api/call/initiate", {
                   conversationId: selectedConversationId,
                   callType: type,
-                },
-              } as any);
+                });
+              } catch (error) {
+                console.error("Failed to initiate call:", error);
+                toast({
+                  title: "Call Failed",
+                  description: "Failed to initiate call",
+                  variant: "destructive",
+                });
+              }
             }
           }}
         />
@@ -1852,7 +2051,7 @@ function NewConversationDialog({
                       setSelectedUsers((prev) =>
                         prev.includes(user.id)
                           ? prev.filter((id) => id !== user.id)
-                          : [...prev, user.id]
+                          : [...prev, user.id],
                       );
                     }}
                     className={`w-full flex items-center gap-3 p-3 rounded-md hover-elevate active-elevate-2 ${

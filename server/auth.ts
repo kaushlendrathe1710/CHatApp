@@ -20,7 +20,7 @@ declare global {
 }
 
 // Extend session type to include userId
-declare module 'express-session' {
+declare module "express-session" {
   interface SessionData {
     userId: string;
     email: string;
@@ -28,7 +28,11 @@ declare module 'express-session' {
 }
 
 // Authentication middleware - attaches user to req for convenience
-export async function isAuthenticated(req: Request, res: Response, next: NextFunction) {
+export async function isAuthenticated(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   if (req.session && req.session.userId) {
     try {
       const user = await storage.getUser(req.session.userId);
@@ -68,10 +72,14 @@ const verifyOTPSchema = z.object({
 // Register user schema
 const registerUserSchema = z.object({
   fullName: z.string().min(2, "Full name must be at least 2 characters"),
-  username: z.string()
+  username: z
+    .string()
     .min(3, "Username must be at least 3 characters")
     .max(20, "Username must be at most 20 characters")
-    .regex(/^[a-zA-Z0-9]+$/, "Username must be alphanumeric (no spaces or special characters)"),
+    .regex(
+      /^[a-zA-Z0-9]+$/,
+      "Username must be alphanumeric (no spaces or special characters)",
+    ),
   mobileNumber: z.string().min(10, "Valid mobile number is required"),
 });
 
@@ -92,83 +100,126 @@ const otpVerifyLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const otpResendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // Max 3 resend requests per 15 minutes per IP
+  message: "Too many resend requests, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Setup auth routes
 export function setupAuth(app: Express) {
   // Request OTP
-  app.post('/api/auth/request-otp', otpRequestLimiter, async (req: Request, res: Response) => {
-    try {
-      const { email } = requestOTPSchema.parse(req.body);
+  app.post(
+    "/api/auth/request-otp",
+    otpRequestLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { email } = requestOTPSchema.parse(req.body);
 
-      const result = await otpService.sendOTP(email);
+        const result = await otpService.sendOTP(email);
 
-      res.json({
-        success: true,
-        message: "OTP sent successfully",
-        expiresIn: result.expiresIn,
-      });
-    } catch (error) {
-      console.error("Error sending OTP:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
+        res.json({
+          success: true,
+          message: "OTP sent successfully",
+          expiresIn: result.expiresIn,
+        });
+      } catch (error) {
+        console.error("Error sending OTP:", error);
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: error.errors[0].message });
+        }
+        res.status(500).json({ message: "Failed to send OTP" });
       }
-      res.status(500).json({ message: "Failed to send OTP" });
-    }
-  });
+    },
+  );
+
+  // Resend OTP
+  app.post(
+    "/api/auth/resend-otp",
+    otpResendLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { email } = requestOTPSchema.parse(req.body);
+
+        const result = await otpService.sendOTP(email);
+
+        res.json({
+          success: true,
+          message: "OTP resent successfully",
+          expiresIn: result.expiresIn,
+        });
+      } catch (error) {
+        console.error("Error resending OTP:", error);
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: error.errors[0].message });
+        }
+        res.status(500).json({ message: "Failed to resend OTP" });
+      }
+    },
+  );
 
   // Verify OTP
-  app.post('/api/auth/verify-otp', otpVerifyLimiter, async (req: Request, res: Response) => {
-    try {
-      const { email, otp } = verifyOTPSchema.parse(req.body);
+  app.post(
+    "/api/auth/verify-otp",
+    otpVerifyLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { email, otp } = verifyOTPSchema.parse(req.body);
 
-      const isValid = await otpService.verifyOTP(email, otp);
+        const isValid = await otpService.verifyOTP(email, otp);
 
-      if (!isValid) {
-        return res.status(400).json({ message: "Invalid or expired OTP" });
-      }
+        if (!isValid) {
+          return res.status(400).json({ message: "Invalid or expired OTP" });
+        }
 
-      // Check if user exists
-      let user = await storage.getUserByEmail(email);
+        // Check if user exists
+        let user = await storage.getUserByEmail(email);
 
-      if (!user) {
-        // Create new user with email only
-        user = await storage.createUser({
-          email,
-          isRegistered: false,
+        if (!user) {
+          // Create new user with email only
+          user = await storage.createUser({
+            email,
+            isRegistered: false,
+          });
+        }
+
+        // Set session
+        req.session.userId = user.id;
+        req.session.email = user.email;
+
+        res.json({
+          success: true,
+          user: {
+            id: user.id,
+            email: user.email,
+            username: user.username,
+            fullName: user.fullName,
+            mobileNumber: user.mobileNumber,
+            isRegistered: user.isRegistered,
+          },
         });
+      } catch (error) {
+        console.error("Error verifying OTP:", error);
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: error.errors[0].message });
+        }
+        res.status(500).json({ message: "Failed to verify OTP" });
       }
-
-      // Set session
-      req.session.userId = user.id;
-      req.session.email = user.email;
-
-      res.json({
-        success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          fullName: user.fullName,
-          mobileNumber: user.mobileNumber,
-          isRegistered: user.isRegistered,
-        },
-      });
-    } catch (error) {
-      console.error("Error verifying OTP:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
-      }
-      res.status(500).json({ message: "Failed to verify OTP" });
-    }
-  });
+    },
+  );
 
   // Register user (first-time users only)
-  app.post('/api/auth/register', async (req: Request, res: Response) => {
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
       if (!req.session || !req.session.userId) {
         return res.status(401).json({ message: "Not authenticated" });
       }
 
-      const { fullName, username, mobileNumber } = registerUserSchema.parse(req.body);
+      const { fullName, username, mobileNumber } = registerUserSchema.parse(
+        req.body,
+      );
 
       // Check if username is already taken
       const existingUser = await storage.getUserByUsername(username);
@@ -205,14 +256,14 @@ export function setupAuth(app: Express) {
   });
 
   // Get current user
-  app.get('/api/auth/user', async (req: Request, res: Response) => {
+  app.get("/api/auth/user", async (req: Request, res: Response) => {
     try {
       if (!req.session || !req.session.userId) {
         return res.status(401).json({ message: "Not authenticated" });
       }
 
       const user = await storage.getUser(req.session.userId);
-      
+
       if (!user) {
         req.session.destroy(() => {});
         return res.status(401).json({ message: "User not found" });
@@ -237,7 +288,7 @@ export function setupAuth(app: Express) {
   });
 
   // Logout
-  app.post('/api/auth/logout', (req: Request, res: Response) => {
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
     req.session.destroy((err) => {
       if (err) {
         console.error("Error destroying session:", err);
