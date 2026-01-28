@@ -188,7 +188,7 @@ export default function Home() {
 
             if (conversation) {
               const sender = conversation.participants.find(
-                (p) => p.userId === message.data.senderId,
+                (p) => p?.userId === message.data.senderId,
               );
 
               senderName = sender ? getUserDisplayName(sender.user) : "Someone";
@@ -745,7 +745,7 @@ export default function Home() {
           try {
             // Get the other user's public key
             const otherUser = selectedConversation.participants.find(
-              (p) => p.userId !== user?.id,
+              (p) => p?.userId !== user?.id,
             );
             if (otherUser && peerPublicKeys[otherUser.userId]) {
               finalContent = await encryptMessage(
@@ -1016,11 +1016,11 @@ export default function Home() {
     const userIds = typingUsers.get(selectedConversationId);
     if (!userIds) return [];
 
-    return Array.from(userIds)
+        return Array.from(userIds)
       .filter((id) => id !== user.id)
       .map((id) => {
         const participant = selectedConversation?.participants.find(
-          (p) => p.userId === id,
+          (p) => p?.userId === id,
         );
         return participant ? getUserDisplayName(participant.user) : "Someone";
       });
@@ -1029,7 +1029,7 @@ export default function Home() {
   const filteredConversations = conversations.filter((conv) => {
     if (!searchQuery) return true;
     const otherParticipants = conv.participants.filter(
-      (p) => p.userId !== user?.id,
+      (p) => p?.userId !== user?.id,
     );
     const name =
       (conv.isGroup || conv.isBroadcast) && conv.name
@@ -1246,8 +1246,9 @@ export default function Home() {
             ) : (
               <div data-testid="conversations-list">
                 {filteredConversations.map((conversation) => {
+                  const currentUserId = user?.id || "";
                   const otherUserId = conversation.participants.find(
-                    (p) => p.userId !== user!.id,
+                    (p) => p?.userId !== currentUserId,
                   )?.userId;
                   const isOnline = otherUserId
                     ? onlineUsers.has(otherUserId)
@@ -1257,7 +1258,7 @@ export default function Home() {
                     <ConversationListItem
                       key={conversation.id}
                       conversation={conversation}
-                      currentUserId={user!.id}
+                      currentUserId={currentUserId}
                       isActive={conversation.id === selectedConversationId}
                       isOnline={!conversation.isGroup ? isOnline : undefined}
                       onClick={() => {
@@ -1321,7 +1322,7 @@ export default function Home() {
                       {(() => {
                         const otherParticipant =
                           selectedConversation.participants.find(
-                            (p) => p.userId !== user?.id,
+                            (p) => p?.userId !== user?.id,
                           );
                         const isOnline = otherParticipant
                           ? onlineUsers.has(otherParticipant.userId)
@@ -1446,7 +1447,7 @@ export default function Home() {
                         (user?.role === "admin" ||
                           user?.role === "super_admin" ||
                           selectedConversation.participants.some(
-                            (p) => p.userId === user?.id && p.role === "admin",
+                            (p) => p?.userId === user?.id && p?.role === "admin",
                           )) && (
                           <Button
                             variant="ghost"
@@ -1754,7 +1755,7 @@ export default function Home() {
             user?.role === "admin" ||
             user?.role === "super_admin" ||
             selectedConversation.participants.some(
-              (p) => p.userId === user?.id && p.role === "admin",
+              (p) => p?.userId === user?.id && p?.role === "admin",
             )
           }
           currentUserId={user?.id || ""}
@@ -1813,7 +1814,7 @@ export default function Home() {
                 return conversation.name || "Group";
               }
               return getUserDisplayName(
-                conversation?.participants.find((p) => p.userId !== user?.id)
+                conversation?.participants.find((p) => p?.userId !== user?.id)
                   ?.user || {},
               );
             })()}
@@ -1827,7 +1828,7 @@ export default function Home() {
                 return conversation.avatarUrl || undefined;
               }
               return (
-                conversation?.participants.find((p) => p.userId !== user?.id)
+                conversation?.participants.find((p) => p?.userId !== user?.id)
                   ?.user.profileImageUrl || undefined
               );
             })()}
@@ -1877,7 +1878,7 @@ export default function Home() {
                 return conversation.name || "Group";
               }
               return getUserDisplayName(
-                conversation?.participants.find((p) => p.userId !== user?.id)
+                conversation?.participants.find((p) => p?.userId !== user?.id)
                   ?.user || {},
               );
             })()}

@@ -73,7 +73,7 @@ export function VideoCallDialog({
 
   useEffect(() => {
     console.log(
-      `[VideoCall] Effect triggered - open: ${open}, callAccepted: ${callAccepted}, callRejected: ${callRejected}, isInitiator: ${isInitiator}`
+      `[VideoCall] Effect triggered - open: ${open}, callAccepted: ${callAccepted}, callRejected: ${callRejected}, isInitiator: ${isInitiator}`,
     );
 
     // For initiator, auto-accept if not already accepted
@@ -87,13 +87,13 @@ export function VideoCallDialog({
       console.log(
         `[VideoCall] Initializing call as ${
           isInitiator ? "initiator" : "receiver"
-        }`
+        }`,
       );
       initializeCall();
       callStartTime.current = Date.now();
       const interval = setInterval(() => {
         setCallDuration(
-          Math.floor((Date.now() - callStartTime.current) / 1000)
+          Math.floor((Date.now() - callStartTime.current) / 1000),
         );
       }, 1000);
       return () => clearInterval(interval);
@@ -126,7 +126,21 @@ export function VideoCallDialog({
     if (processedSignals.current.has(signalKey)) {
       console.log(
         "[VideoCall] Signal already processed, skipping:",
-        cleanSignal.type
+        cleanSignal.type,
+      );
+      return;
+    }
+
+    // Validate signal type - initiators should only receive answers, receivers should only receive offers
+    if (isInitiator && cleanSignal.type === "offer") {
+      console.warn(
+        "[VideoCall] ⚠️ Initiator received offer (should only receive answer), ignoring to prevent state error",
+      );
+      return;
+    }
+    if (!isInitiator && cleanSignal.type === "answer") {
+      console.warn(
+        "[VideoCall] ⚠️ Receiver received answer (should only receive offer), ignoring to prevent state error",
       );
       return;
     }
@@ -138,7 +152,7 @@ export function VideoCallDialog({
       processedSignals.current.add(signalKey);
       console.log(
         "[VideoCall] ✅ Signal processed successfully:",
-        cleanSignal.type
+        cleanSignal.type,
       );
     } catch (error) {
       console.error("[VideoCall] ❌ Error signaling peer:", error);
@@ -148,7 +162,7 @@ export function VideoCallDialog({
         variant: "destructive",
       });
     }
-  }, [peer, incomingSignal, toast]);
+  }, [peer, incomingSignal, toast, isInitiator]);
 
   // Store pending signal for receiver before peer is created
   useEffect(() => {
@@ -160,13 +174,14 @@ export function VideoCallDialog({
       "isInitiator:",
       isInitiator,
       "callAccepted:",
-      callAccepted
+      callAccepted,
     );
+    // Only store signals for receivers who haven't created their peer yet
     if (incomingSignal && !peer && !isInitiator && !callAccepted) {
       const { _timestamp, ...cleanSignal } = incomingSignal;
       console.log(
         "[VideoCall] ✅ Storing pending signal for receiver:",
-        cleanSignal.type
+        cleanSignal.type,
       );
       setPendingSignal(cleanSignal);
     }
@@ -185,18 +200,18 @@ export function VideoCallDialog({
           const constraints = getVideoConstraints();
           console.log(
             "[VideoCall] Requesting video with constraints:",
-            constraints
+            constraints,
           );
           stream = await navigator.mediaDevices.getUserMedia(constraints);
           console.log(
             "[VideoCall] Got local stream with",
             stream.getTracks().length,
-            "tracks"
+            "tracks",
           );
         } catch (videoError: any) {
           console.warn(
             "[VideoCall] Camera access failed, falling back to audio-only:",
-            videoError
+            videoError,
           );
 
           // Fall back to audio-only
@@ -253,10 +268,10 @@ export function VideoCallDialog({
           `[VideoCall] ${
             isInitiator ? "📤 INITIATOR" : "📥 RECEIVER"
           } Generated signal:`,
-          data.type
+          data.type,
         );
         console.log(
-          `[VideoCall] Current state - isRinging: ${isRinging}, isConnected: ${isConnected}`
+          `[VideoCall] Current state - isRinging: ${isRinging}, isConnected: ${isConnected}`,
         );
         onSignal(data);
       });
@@ -267,13 +282,13 @@ export function VideoCallDialog({
             isInitiator ? "📤 INITIATOR" : "📥 RECEIVER"
           } Received remote stream with`,
           stream.getTracks().length,
-          "tracks"
+          "tracks",
         );
         setRemoteStream(stream);
         setIsConnected(true);
         setIsRinging(false);
         console.log(
-          "[VideoCall] ✅ Call connected - isRinging set to false, isConnected set to true"
+          "[VideoCall] ✅ Call connected - isRinging set to false, isConnected set to true",
         );
       });
 
@@ -291,11 +306,11 @@ export function VideoCallDialog({
       console.log("[VideoCall] Checking for signals to process...");
       console.log(
         "[VideoCall] pendingSignal:",
-        pendingSignal ? pendingSignal.type : "null"
+        pendingSignal ? pendingSignal.type : "null",
       );
       console.log(
         "[VideoCall] incomingSignal:",
-        incomingSignal ? incomingSignal.type : "null"
+        incomingSignal ? incomingSignal.type : "null",
       );
 
       const signalToProcess = pendingSignal || incomingSignal;
@@ -303,7 +318,7 @@ export function VideoCallDialog({
         const { _timestamp, ...cleanSignal } = signalToProcess;
         console.log(
           "[VideoCall] Processing signal after peer creation:",
-          cleanSignal.type
+          cleanSignal.type,
         );
         const signalKey = JSON.stringify(cleanSignal);
         processedSignals.current.add(signalKey);
@@ -311,11 +326,11 @@ export function VideoCallDialog({
         setPendingSignal(null);
         console.log(
           "[VideoCall] ✅ Initial signal processed:",
-          cleanSignal.type
+          cleanSignal.type,
         );
       } else {
         console.log(
-          "[VideoCall] ⚠️ No signal to process! This will prevent connection."
+          "[VideoCall] ⚠️ No signal to process! This will prevent connection.",
         );
       }
 
@@ -392,7 +407,7 @@ export function VideoCallDialog({
       // Unmuting - check if we need to request permissions again
       if (audioTracks.length === 0 || audioTracks[0].readyState === "ended") {
         console.log(
-          "[VideoCall] Audio track ended, requesting new permissions"
+          "[VideoCall] Audio track ended, requesting new permissions",
         );
         try {
           const newStream = await navigator.mediaDevices.getUserMedia({
@@ -455,7 +470,7 @@ export function VideoCallDialog({
       // Turning video on - check if we need to request permissions again
       if (videoTracks.length === 0 || videoTracks[0].readyState === "ended") {
         console.log(
-          "[VideoCall] Video track ended, requesting new permissions"
+          "[VideoCall] Video track ended, requesting new permissions",
         );
         try {
           const newStream = await navigator.mediaDevices.getUserMedia({
@@ -548,12 +563,12 @@ export function VideoCallDialog({
       "[VideoCall] State before accept - callAccepted:",
       callAccepted,
       "isRinging:",
-      isRinging
+      isRinging,
     );
     setCallAccepted(true);
     setIsRinging(false);
     console.log(
-      "[VideoCall] State updated - callAccepted: true, isRinging: false"
+      "[VideoCall] State updated - callAccepted: true, isRinging: false",
     );
   };
 
