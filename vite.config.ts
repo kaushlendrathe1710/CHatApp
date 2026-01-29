@@ -27,10 +27,11 @@ export default defineConfig({
     },
   },
   define: {
-    "process.env": {},
     global: "globalThis",
-    "process.nextTick":
-      "((fn, ...args) => Promise.resolve().then(() => fn(...args)))",
+    // vite 3 and above no longer polyfill node globals by default
+    // "process.env": {},
+    // "process.nextTick":
+      // "((fn, ...args) => Promise.resolve().then(() => fn(...args)))",
   },
   root: path.resolve(import.meta.dirname, "client"),
   build: {
