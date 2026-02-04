@@ -1344,7 +1344,7 @@ export default function Home() {
                               onClick={handleOpenUserDetails}
                               className={`flex items-center gap-3 flex-1 min-w-0 ${
                                 isDirectMessage
-                                  ? "hover-elevate active-elevate-2 rounded-md p-1 -ml-1"
+                                  ? "hover-elevate active-elevate-2 rounded-md p-1 -ml-2"
                                   : ""
                               }`}
                               data-testid="button-chat-header"
@@ -1387,7 +1387,7 @@ export default function Home() {
 
                               <div className="flex-1 min-w-0 text-left">
                                 <h2
-                                  className="font-semibold break-words line-clamp-2 leading-tight"
+                                  className="font-semibold break-words line-clamp-2 leading-tight truncate"
                                   data-testid="text-conversation-header-name"
                                 >
                                   {(selectedConversation.isGroup ||
@@ -1419,7 +1419,7 @@ export default function Home() {
                                   </p>
                                 ) : (
                                   <p
-                                    className="text-xs text-muted-foreground"
+                                    className="text-xs text-muted-foreground line-clamp-2"
                                     data-testid="text-user-status"
                                   >
                                     {isOnline
@@ -1447,7 +1447,8 @@ export default function Home() {
                         (user?.role === "admin" ||
                           user?.role === "super_admin" ||
                           selectedConversation.participants.some(
-                            (p) => p?.userId === user?.id && p?.role === "admin",
+                            (p) =>
+                              p?.userId === user?.id && p?.role === "admin",
                           )) && (
                           <Button
                             variant="ghost"
@@ -1511,22 +1512,6 @@ export default function Home() {
                       >
                         <Video className="h-5 w-5" />
                       </Button>
-                      {!selectedConversation.isGroup &&
-                        !selectedConversation.isBroadcast && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setEncryptionDialogOpen(true)}
-                            data-testid="button-encryption"
-                            title="Enable End-to-End Encryption"
-                          >
-                            <Shield
-                              className={`h-5 w-5 ${
-                                isEncryptionEnabled ? "text-primary" : ""
-                              }`}
-                            />
-                          </Button>
-                        )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -1548,6 +1533,22 @@ export default function Home() {
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete Chat
                           </DropdownMenuItem>
+                          {!selectedConversation.isGroup &&
+                            !selectedConversation.isBroadcast && (
+                              <DropdownMenuItem
+                                onClick={() => setEncryptionDialogOpen(true)}
+                                className={`${
+                                  isEncryptionEnabled ? "text-primary" : ""
+                                }`}
+                              >
+                                <Shield
+                                  className={`h-5 w-5 mr-2 ${
+                                    isEncryptionEnabled ? "text-primary" : ""
+                                  }`}
+                                />
+                                Encryption
+                              </DropdownMenuItem>
+                              )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -1716,10 +1717,10 @@ export default function Home() {
       </div>
 
       {/* New Conversation Dialog */}
-      <NewConversationDialog
+      {/* <NewConversationDialog
         users={allUsers}
         onCreateConversation={createConversationMutation.mutate}
-      />
+      /> */}
 
       {/* Forward Message Dialog */}
       <ForwardMessageDialog

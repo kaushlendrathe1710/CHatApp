@@ -68,8 +68,36 @@ export function VideoCallDialog({
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const ringtoneRef = useRef<HTMLAudioElement>(null);
   const callStartTime = useRef<number>(0);
   const { toast } = useToast();
+
+  // Play ringtone for incoming calls
+  useEffect(() => {
+    if (
+      open &&
+      !isInitiator &&
+      isRinging &&
+      !callAccepted &&
+      ringtoneRef.current
+    ) {
+      console.log("[VideoCall] Playing ringtone for incoming call");
+      ringtoneRef.current.loop = true;
+      ringtoneRef.current.play().catch((err) => {
+        console.warn("[VideoCall] Could not play ringtone:", err);
+      });
+    } else if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
+
+    return () => {
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
+    };
+  }, [open, isInitiator, isRinging, callAccepted]);
 
   useEffect(() => {
     console.log(
@@ -597,213 +625,226 @@ export function VideoCallDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={`${
-          isFullscreen ? "max-w-full h-screen" : "max-w-4xl"
-        } p-0 border bg-card`}
-        data-testid="dialog-video-call"
-      >
-        <VisuallyHidden>
-          <DialogTitle>Video Call</DialogTitle>
-          <DialogDescription>
-            {isInitiator
-              ? `Calling ${callerName}`
-              : `Incoming call from ${callerName}`}
-          </DialogDescription>
-        </VisuallyHidden>
-        <div className="relative w-full h-full min-h-[500px] bg-gradient-to-br from-background via-card to-background rounded-lg overflow-hidden">
-          {remoteStream ? (
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-              data-testid="video-remote"
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full bg-gradient-to-br from-primary/10 via-primary/5 to-background">
-              <div className="text-center space-y-6">
-                <div className="animate-pulse">
-                  <Phone className="h-16 w-16 mx-auto text-primary" />
-                </div>
-                <p className="text-lg text-foreground font-semibold">
-                  {isInitiator
-                    ? `Calling ${callerName}...`
-                    : `${callerName} is calling...`}
-                </p>
-
-                {/* Pre-call controls */}
-                {isRinging && (
-                  <div className="flex gap-3 justify-center items-center mt-6">
-                    <Button
-                      size="icon"
-                      variant={
-                        preCallAudioEnabled ? "secondary" : "destructive"
-                      }
-                      className="h-12 w-12 rounded-full"
-                      onClick={togglePreCallAudio}
-                      title={
-                        preCallAudioEnabled
-                          ? "Mute microphone"
-                          : "Unmute microphone"
-                      }
-                    >
-                      {preCallAudioEnabled ? (
-                        <Mic className="h-5 w-5" />
-                      ) : (
-                        <MicOff className="h-5 w-5" />
-                      )}
-                    </Button>
-
-                    <Button
-                      size="icon"
-                      variant={
-                        preCallVideoEnabled ? "secondary" : "destructive"
-                      }
-                      className="h-12 w-12 rounded-full"
-                      onClick={togglePreCallVideo}
-                      title={
-                        preCallVideoEnabled
-                          ? "Turn off camera"
-                          : "Turn on camera"
-                      }
-                      disabled={cameraPermissionDenied && !preCallVideoEnabled}
-                    >
-                      {preCallVideoEnabled ? (
-                        <Video className="h-5 w-5" />
-                      ) : (
-                        <VideoOff className="h-5 w-5" />
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {callType === "video" && localStream && (
-            <div className="absolute bottom-4 right-4 w-48 h-36 bg-gray-900 rounded-lg overflow-hidden">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          className={`${
+            isFullscreen ? "max-w-full h-screen" : "max-w-4xl"
+          } p-0 border bg-card`}
+          data-testid="dialog-video-call"
+        >
+          <VisuallyHidden>
+            <DialogTitle>Video Call</DialogTitle>
+            <DialogDescription>
+              {isInitiator
+                ? `Calling ${callerName}`
+                : `Incoming call from ${callerName}`}
+            </DialogDescription>
+          </VisuallyHidden>
+          <div className="relative w-full h-full min-h-[500px] bg-gradient-to-br from-background via-card to-background rounded-lg overflow-hidden">
+            {remoteStream ? (
               <video
-                ref={localVideoRef}
+                ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                muted
-                className="w-full h-full object-cover mirror"
-                data-testid="video-local"
+                className="w-full h-full object-cover"
+                data-testid="video-remote"
               />
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center justify-center h-full bg-gradient-to-br from-primary/10 via-primary/5 to-background">
+                <div className="text-center space-y-6">
+                  <div className="animate-pulse">
+                    <Phone className="h-16 w-16 mx-auto text-primary" />
+                  </div>
+                  <p className="text-lg text-foreground font-semibold">
+                    {isInitiator
+                      ? `Calling ${callerName}...`
+                      : `${callerName} is calling...`}
+                  </p>
 
-          {isConnected && (
-            <div className="absolute top-4 left-4 bg-primary/90 backdrop-blur-sm px-3 py-1 rounded-full text-primary-foreground text-sm font-semibold shadow-lg">
-              {formatDuration(callDuration)}
-            </div>
-          )}
+                  {/* Pre-call controls */}
+                  {isRinging && (
+                    <div className="flex gap-3 justify-center items-center mt-6">
+                      <Button
+                        size="icon"
+                        variant={
+                          preCallAudioEnabled ? "secondary" : "destructive"
+                        }
+                        className="h-12 w-12 rounded-full"
+                        onClick={togglePreCallAudio}
+                        title={
+                          preCallAudioEnabled
+                            ? "Mute microphone"
+                            : "Unmute microphone"
+                        }
+                      >
+                        {preCallAudioEnabled ? (
+                          <Mic className="h-5 w-5" />
+                        ) : (
+                          <MicOff className="h-5 w-5" />
+                        )}
+                      </Button>
 
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3">
-            {/* Incoming Call - Accept/Reject Buttons (Receiver Only) */}
-            {!isInitiator && isRinging && !callAccepted && (
-              <>
-                <Button
-                  size="icon"
-                  variant="default"
-                  className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90 shadow-lg"
-                  onClick={acceptCall}
-                  data-testid="button-accept-call"
-                  title="Accept call"
-                >
-                  <Phone className="h-6 w-6" />
-                </Button>
+                      <Button
+                        size="icon"
+                        variant={
+                          preCallVideoEnabled ? "secondary" : "destructive"
+                        }
+                        className="h-12 w-12 rounded-full"
+                        onClick={togglePreCallVideo}
+                        title={
+                          preCallVideoEnabled
+                            ? "Turn off camera"
+                            : "Turn on camera"
+                        }
+                        disabled={
+                          cameraPermissionDenied && !preCallVideoEnabled
+                        }
+                      >
+                        {preCallVideoEnabled ? (
+                          <Video className="h-5 w-5" />
+                        ) : (
+                          <VideoOff className="h-5 w-5" />
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
+            {callType === "video" && localStream && (
+              <div className="absolute bottom-4 right-4 w-48 h-36 bg-gray-900 rounded-lg overflow-hidden">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover mirror"
+                  data-testid="video-local"
+                />
+              </div>
+            )}
+
+            {isConnected && (
+              <div className="absolute top-4 left-4 bg-primary/90 backdrop-blur-sm px-3 py-1 rounded-full text-primary-foreground text-sm font-semibold shadow-lg">
+                {formatDuration(callDuration)}
+              </div>
+            )}
+
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3">
+              {/* Incoming Call - Accept/Reject Buttons (Receiver Only) */}
+              {!isInitiator && isRinging && !callAccepted && (
+                <>
+                  <Button
+                    size="icon"
+                    variant="default"
+                    className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90 shadow-lg"
+                    onClick={acceptCall}
+                    data-testid="button-accept-call"
+                    title="Accept call"
+                  >
+                    <Phone className="h-6 w-6" />
+                  </Button>
+
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    className="h-14 w-14 rounded-full"
+                    onClick={rejectCall}
+                    data-testid="button-reject-call"
+                    title="Reject call"
+                  >
+                    <PhoneOff className="h-6 w-6" />
+                  </Button>
+                </>
+              )}
+
+              {/* Initiator Waiting - Only End Call Button */}
+              {isInitiator && isRinging && !isConnected && (
                 <Button
                   size="icon"
                   variant="destructive"
                   className="h-14 w-14 rounded-full"
-                  onClick={rejectCall}
-                  data-testid="button-reject-call"
-                  title="Reject call"
+                  onClick={endCall}
+                  data-testid="button-end-call"
+                  title="End call"
                 >
                   <PhoneOff className="h-6 w-6" />
                 </Button>
-              </>
-            )}
+              )}
 
-            {/* Initiator Waiting - Only End Call Button */}
-            {isInitiator && isRinging && !isConnected && (
-              <Button
-                size="icon"
-                variant="destructive"
-                className="h-14 w-14 rounded-full"
-                onClick={endCall}
-                data-testid="button-end-call"
-                title="End call"
-              >
-                <PhoneOff className="h-6 w-6" />
-              </Button>
-            )}
-
-            {/* Active Call Controls - Full Controls */}
-            {((isInitiator && isConnected) || (callAccepted && !isRinging)) && (
-              <>
-                <Button
-                  size="icon"
-                  variant={isMuted ? "destructive" : "secondary"}
-                  className="h-12 w-12 rounded-full"
-                  onClick={toggleMute}
-                  data-testid="button-toggle-mute"
-                >
-                  {isMuted ? (
-                    <MicOff className="h-5 w-5" />
-                  ) : (
-                    <Mic className="h-5 w-5" />
-                  )}
-                </Button>
-
-                {callType === "video" && (
+              {/* Active Call Controls - Full Controls */}
+              {((isInitiator && isConnected) ||
+                (callAccepted && !isRinging)) && (
+                <>
                   <Button
                     size="icon"
-                    variant={isVideoOff ? "destructive" : "secondary"}
+                    variant={isMuted ? "destructive" : "secondary"}
                     className="h-12 w-12 rounded-full"
-                    onClick={toggleVideo}
-                    data-testid="button-toggle-video"
+                    onClick={toggleMute}
+                    data-testid="button-toggle-mute"
                   >
-                    {isVideoOff ? (
-                      <VideoOff className="h-5 w-5" />
+                    {isMuted ? (
+                      <MicOff className="h-5 w-5" />
                     ) : (
-                      <Video className="h-5 w-5" />
+                      <Mic className="h-5 w-5" />
                     )}
                   </Button>
-                )}
 
-                <Button
-                  size="icon"
-                  variant="destructive"
-                  className="h-12 w-12 rounded-full"
-                  onClick={endCall}
-                  data-testid="button-end-call"
-                >
-                  <PhoneOff className="h-5 w-5" />
-                </Button>
-
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  className="h-12 w-12 rounded-full"
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                  data-testid="button-toggle-fullscreen"
-                >
-                  {isFullscreen ? (
-                    <Minimize2 className="h-5 w-5" />
-                  ) : (
-                    <Maximize2 className="h-5 w-5" />
+                  {callType === "video" && (
+                    <Button
+                      size="icon"
+                      variant={isVideoOff ? "destructive" : "secondary"}
+                      className="h-12 w-12 rounded-full"
+                      onClick={toggleVideo}
+                      data-testid="button-toggle-video"
+                    >
+                      {isVideoOff ? (
+                        <VideoOff className="h-5 w-5" />
+                      ) : (
+                        <Video className="h-5 w-5" />
+                      )}
+                    </Button>
                   )}
-                </Button>
-              </>
-            )}
+
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    className="h-12 w-12 rounded-full"
+                    onClick={endCall}
+                    data-testid="button-end-call"
+                  >
+                    <PhoneOff className="h-5 w-5" />
+                  </Button>
+
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="h-12 w-12 rounded-full"
+                    onClick={() => setIsFullscreen(!isFullscreen)}
+                    data-testid="button-toggle-fullscreen"
+                  >
+                    {isFullscreen ? (
+                      <Minimize2 className="h-5 w-5" />
+                    ) : (
+                      <Maximize2 className="h-5 w-5" />
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ringtone for incoming calls - using a simple beep tone */}
+      <audio ref={ringtoneRef} loop>
+        <source
+          src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHmm68OScTgwPUKzn77BdGAg+ltryxnMpBSl+zPLaizsIGGS57OihUBELTKXh8bllHAU2jdXzzn0vBSF1xe/glEILElyx6OyrWBUIQ5zd8sFuJAUuhM/z1YU2Bhxquu7mnVARDFCr5O+zYBoHPJLY8sh0KwUme8rx3I4+CRZiturqpVITC0mi4PK8aB8GM4nU8tJ+MQYfcsLu45ZFDBJYr+ftrloXCECY3PLEcSYELIHO8diJOQcZZ7vu5p1PEAxPqOPwtmMcBjiP1/PMeS0GI3fH8N2RQAoUXrTp66hVFApGnt/yvmwhBTCG0PPTgjMGHWm68OSbTgwPUKzn77BeGQc9ltvyxnUoBSh+zPDaizsIGGS56+mjTxELTKXh8bllHAU1jdT0z3wuBSF0xO/glEILElyx6OyrWBUIQ5vd8sFuJAUug8/y1YU2Bhxquu3mnVARDFCq5PC0YRsHPJHY8sl1KgUme8rx3I4+CRVht+rqpVITC0mh4PG8Zx8GM4jU8tJ/MgUfccPu45ZFDBJYr+ftr1sYB0CY3PLEcSYFK4DN8tiIOQcZZ7vu5p5PEAxPp+PwtmQcBTiP1/PMeSoFI3bH8N+RQAoUXrPq66hVFApGnt/yv2wiBTCG0PPSgzQGHWm78OSbTgwPUKvn77BeGQc9ltrypnUoBSh9y/HajDsIF2W56+mjTxELTKTi8blnHAU1jdTy0HwvBSF0xPDglEILElux6OyrWRUIRJrd88FwJAQug8/y1YU2Bhxpuu3mnVARDFCq5PC0YRsHPJHY88p1KgUmecnw3Y4+CRVhtuvqpVMSC0mh4PG8aCAGM4jT8tJ/MgUfccPv45ZGCxFYr+jtr1sYB0CY3PLFcSYFK3/N8diIOQcZZ7zv5qBOEAxPp+PwtmQcBTeP2PPMeSoFI3bH8d+RQQkUXrPq66hWEwlGnt/yv2wiBDCG0PPSgzQGHWm78OSbTwwPUKvn8LFfGQc9ltvyxnUpBSh9y/HajDwIF2S56+mjUREKS6Ti8blnHQU1jdTy0H4wBiFzxPDglUIMEVux6eyrWRUJQ5rd88NvJQQug8/z1oY3Bxxpue3mnVARDFCp5PC1YhsGO5DX88p1LAUmecnw3Y8/CRVhtuvqpVMSC0mh4PG9aiAGM4jT8tKAMgUfccPv45dGCxFYr+jur1wZBz+Y3PLFcicFK3/M8tiKOgcZZ7zv56BODwxPpuPxt2UcBTeP2PPNeSsFI3bH8d+RQQkTXbPq7KlXEwlGnt/yv2wiBDCF0PPSgzUGHWm78OSbTwwPUKvn8LFfGQc9ltrzxnUpBSh9y/HajDwIF2S56+mjUREKS6Tj8btoHQU1jdTy0H4wBiFzw+/glUIMEVux6eyrWRUIQ5nE88NvJQQug8/z1oY3Bxxpue3mnVERDFCp5PC1YhsGO5DX88p2LAUmecnw3Y8/CRVhtuvqpVMSC0mh4PG9aiAGM4jT8tKAMgUfccPv45dGCxFYr+jur1wZBz+Y3PLFcicFK3/M8tiKOgcZZ7zv56BODwxPpuPxt2UcBTeP2PPNey0FJHbH8d+RQQkTXbPq7KlXEwlGnt/yv20iBDCF0PPSgzUGHWm78OSbTwwPUKvn8LFfGQc9ltrzxnUpBSh9y/HajDwIF2S56+mjUREKS6Tj8btoHQU1jdTy0H4wBiFzw+/glUIMEVux6eyrWRUIQ5nE88NvJQQug8/z1oY3Bxxpue3mnVERDFCp5PC1YhsGO5DX88p2LAUmecnw3Y8/CRVhtuvqpVMSC0mh4PG9aiAGM4jT8tKAMgUfccPv45dGCxFYr+jur1wZBz+Y3PLFcicFK3/M8tiKOgcZZ7zv56BODwxPpuPxt2UcBTeP2PPNey0FJHbH8d+RQQkTXbPq7KlXEwlGnt/yv20iBDCF0PPSgzUGHWm78OSbTwwPT6vn8LFfGQc9ltrzxnUpBSh9y/HajDwIF2S56+mjUREKS6Tj8btoHQU1jdTy0H4wBiFzw+/glUIMEVux6eyrWRUIQ5nE88NvJQQug8/z1oY3Bxxpue3mnVERDFCp5PC1YhsGO5DX88p2LAUmecnw3Y8/CRVhtuvqpVMSC0mh4PG9aiAGM4jT8tKAMgUfccPv45dGCxFYr+jur1wZBz+Y3PLFcicFK3/M8tiKOgcZZ7zv56BODwxPpuPxt2UcBTeP2PPNey0FJHbH8d+RQQkTXbPq7KlXEwlGnt/yv20iBDCF0PPSgzUGHWm78OSbTwwPT6vn8LFfGQc9ltvzxnUpBSh9y/HajDwIF2S56+mjUREKS6Tj8btoHQU1jdTy0H4wBiFzw+/glUIMEVux6eyrWRUIQ5nE88NvJQQug8/z1oY3Bxxpue3mnVERDFCp5PC1YhsGO5DX88p2LAUmecnw3Y8/CRVhtuvqpVMSC0mh4PG9aiAGM4jT8tKAMgUfccPv45dGCxFYr+jur1wZBz+Y3PLFcicFK3/M8tiKOgcZZ7zv56BODwxPpuPxt2UcBTeP2PPNey0FJHbH8d+RQQkTXbPq7KlXEwlGnt/yv20iBDCF0PPSgzUGHWm78OSbTwwPT6vn8LFfGQc9ltvzxnUpBSh9y/HajDwIF2S56+mjUREKS6Tj8btoHQU1jdTy0H4wBiFzw+/glUIMEVux6eyrWRUIQ5nE88NvJQQug8/z1oY3Bxxpue3mnVERDFCp5PC1YhsGO5DX88p2LAUmecnw3Y8/CRVhtuvqpVMSC0mh4PG9aiAGM4jT8tKAMgUfccPv45dGCxFYr+jur1wZBz+Y3PLFcicFK3/M8tiKOgcZZ7zv56BODwxPpuPxt2UcBTeP2PPNey0FJHbH8d+RQQkTXbPq7KlXEwlGnt/yv20iBDCF0PPSgzUGHWm78OSbTwwPT6vn8LFfGQc9ltvzxnUpBSh9y/HajDwIF2S56+mjUREKS6Tj8btoHQU1jdTy0H4wBiFzw+/glUIMEVux6eyrWRUIQ5nE88NvJQQug8/z1oY3Bxxpue3mnVERDFCp5PC1YhsGO5DX88p2LAUmecnw3Y8/CRVhtuvqpVMSC0mh4PG9aiAGM4jT8tKAMgUfccPv45dGCxFYr+jur1wZBz+Y3PLFcicFK3/M8tiKOgcZZ7zv56BODwxPpuPxt2UcBTeP2PPNey0FJHbH8d+RQQkTXbPq7KlXEwlGnt/yv20iBDCF0PPSgzUGHWm78OSbTwwPT6vn8LFfGQc="
+          type="audio/wav"
+        />
+      </audio>
+    </>
   );
 }

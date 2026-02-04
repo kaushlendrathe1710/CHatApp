@@ -50,7 +50,7 @@ export function parseLinksInText(
           href: url,
           target: "_blank",
           rel: "noopener noreferrer",
-          className: "text-blue-700 hover:text-blue-600 underline break-words",
+          className: "text-blue-600 hover:text-blue-700 underline break-words",
           onClick: (e:React.MouseEvent<HTMLAnchorElement>) => e.stopPropagation(),
         },
         match[0]

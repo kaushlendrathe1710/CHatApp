@@ -12,8 +12,11 @@ import { Upload, Heart, MessageCircle, Eye, Trash2, Smile } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { UserPhoto } from "@shared/schema";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
+import { ArrowLeft } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function PhotoGallery() {
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -45,11 +48,11 @@ export default function PhotoGallery() {
             'Content-Type': 'application/json',
           },
         });
-        
+
         if (!uploadUrlResponse.ok) {
           throw new Error('Failed to get upload URL');
         }
-        
+
         const { uploadURL, objectKey } = await uploadUrlResponse.json();
 
         // Step 2: Upload file to GCS using signed URL
@@ -140,7 +143,7 @@ export default function PhotoGallery() {
       const end = textarea.selectionEnd;
       const newCaption = caption.substring(0, start) + emojiData.emoji + caption.substring(end);
       setCaption(newCaption);
-      
+
       // Set cursor position after emoji
       setTimeout(() => {
         textarea.focus();
@@ -173,9 +176,19 @@ export default function PhotoGallery() {
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Photo Gallery</h1>
-          <p className="text-muted-foreground">Share your moments</p>
+        <div className="flex gap-2 items-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setLocation("/dashboard")}
+            data-testid="button-back"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Photo Gallery</h1>
+            <p className="text-muted-foreground">Share your moments</p>
+          </div>
         </div>
 
         <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
@@ -212,7 +225,10 @@ export default function PhotoGallery() {
                     onChange={(e) => setCaption(e.target.value)}
                     className="pr-12"
                   />
-                  <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+                  <Popover
+                    open={emojiPickerOpen}
+                    onOpenChange={setEmojiPickerOpen}
+                  >
                     <PopoverTrigger asChild>
                       <Button
                         type="button"
@@ -259,7 +275,9 @@ export default function PhotoGallery() {
             >
               <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-4 text-lg font-semibold">No photos yet</h3>
-              <p className="text-muted-foreground">Upload your first photo to get started</p>
+              <p className="text-muted-foreground">
+                Upload your first photo to get started
+              </p>
             </button>
           </CardContent>
         </Card>
@@ -277,21 +295,33 @@ export default function PhotoGallery() {
               </CardHeader>
               <CardContent className="p-4">
                 {photo.caption && (
-                  <p className="text-sm mb-3" data-testid={`text-caption-${photo.id}`}>
+                  <p
+                    className="text-sm mb-3"
+                    data-testid={`text-caption-${photo.id}`}
+                  >
                     {photo.caption}
                   </p>
                 )}
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1" data-testid={`text-likes-${photo.id}`}>
+                    <span
+                      className="flex items-center gap-1"
+                      data-testid={`text-likes-${photo.id}`}
+                    >
                       <Heart className="h-4 w-4" />
                       {photo.likeCount}
                     </span>
-                    <span className="flex items-center gap-1" data-testid={`text-comments-${photo.id}`}>
+                    <span
+                      className="flex items-center gap-1"
+                      data-testid={`text-comments-${photo.id}`}
+                    >
                       <MessageCircle className="h-4 w-4" />
                       {photo.commentCount}
                     </span>
-                    <span className="flex items-center gap-1" data-testid={`text-views-${photo.id}`}>
+                    <span
+                      className="flex items-center gap-1"
+                      data-testid={`text-views-${photo.id}`}
+                    >
                       <Eye className="h-4 w-4" />
                       {photo.viewCount}
                     </span>

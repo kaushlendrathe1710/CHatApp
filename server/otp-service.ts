@@ -25,6 +25,29 @@ export class OTPService {
     });
   }
 
+    async verifyConnection(): Promise<boolean> {
+    try {
+      if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.warn("⚠️  SMTP not configured - OTP emails will not be sent");
+        return false;
+      }
+
+      console.info("Testing SMTP connection...");
+      await this.transporter.verify();
+      console.info("✅ SMTP connection verified successfully");
+      console.info(`   Host: ${process.env.SMTP_HOST}`);
+      console.info(`   User: ${process.env.SMTP_USER}`);
+      console.info(`   Port: ${process.env.SMTP_PORT}`);
+      return true;
+    } catch (error: any) {
+      console.error("❌ SMTP connection verification failed:", error.message);
+      console.error(
+        "   Emails will not be sent. Please check your SMTP configuration.",
+      );
+      return false;
+    }
+  }
+
   generateOTP(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
@@ -119,12 +142,12 @@ export class OTPService {
       return { success: true, expiresIn: 600 };
     } catch (error: any) {
       console.error('Error sending OTP:', error);
-      
+
       // Provide more specific error messages
       if (error.message?.includes('SMTP not configured')) {
         throw error; // Re-throw with the specific message
       }
-      
+
       // Common SMTP errors
       if (error.code === 'EAUTH') {
         throw new Error('Email authentication failed. Please check SMTP credentials.');
@@ -132,7 +155,7 @@ export class OTPService {
       if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
         throw new Error('Unable to connect to email server. Please try again later.');
       }
-      
+
       throw new Error('Failed to send OTP email. Please try again.');
     }
   }

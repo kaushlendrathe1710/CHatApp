@@ -372,7 +372,7 @@ function ChatMessageComponent({
     if (message.status === "read") {
       return (
         <CheckCheck
-          className="h-4 w-4 text-status-online"
+          className="h-4 w-4 text-cyan-400"
           data-testid="icon-read"
         />
       );
