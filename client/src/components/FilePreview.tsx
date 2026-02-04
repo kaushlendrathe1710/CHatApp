@@ -101,8 +101,8 @@ export function FilePreview({ fileUrl, fileName, fileSize, mimeType, type, showD
   if (type === 'video') {
     return (
       <div className="w-full max-w-full overflow-visible" data-testid="preview-video">
-        <div 
-          onClick={(e) => e.stopPropagation()} 
+        <div
+          onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}

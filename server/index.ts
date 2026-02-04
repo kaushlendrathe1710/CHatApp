@@ -3,6 +3,7 @@ import { registerRoutes, broadcastToConversation } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
 import "dotenv/config";
+import { otpService } from "./otp-service";
 
 const app = express();
 
@@ -77,21 +78,24 @@ app.use((req, res, next) => {
     port,
     host: "0.0.0.0",
     reusePort: true,
-  }, () => {
+  }, async() => {
     log(`serving on port ${port}`);
+    
+    // Test SMTP connection on startup
+    await otpService.verifyConnection();
   });
 
   // Background cleanup job for disappearing messages
   // Run every 5 minutes to check for expired messages
   const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-  
+
   const runCleanup = async () => {
     try {
       const deletedMessages = await storage.deleteExpiredMessages();
-      
+
       if (deletedMessages.length > 0) {
         log(`Deleted ${deletedMessages.length} expired message(s)`);
-        
+
         // Broadcast message deletions to relevant conversations
         deletedMessages.forEach(({ messageId, conversationId }) => {
           broadcastToConversation(conversationId, {
