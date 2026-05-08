@@ -1076,7 +1076,7 @@ export default function Home() {
           {/* Sidebar Header */}
           <div className="h-16 border-b px-4 flex items-center justify-between gap-2 flex-shrink-0">
             <button
-              onClick={() => setLocation("/settings/privacy")}
+              onClick={() => setLocation("/profile")}
               className="flex items-center gap-3 flex-1 min-w-0 hover-elevate active-elevate-2 rounded-md p-1 -ml-1"
               data-testid="button-current-user-profile"
             >

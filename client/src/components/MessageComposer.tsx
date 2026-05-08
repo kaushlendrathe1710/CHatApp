@@ -74,6 +74,8 @@ export const MessageComposer = React.memo(function MessageComposer({
     type: "image" | "video" | "document" | "audio";
   } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastTypingSentRef = useRef(0);
+  const typingThrottleMs = 1500;
   const { toast } = useToast();
 
   // Always keep focus on textarea - runs on every render
@@ -229,7 +231,13 @@ export const MessageComposer = React.memo(function MessageComposer({
 
   const handleChange = (value: string) => {
     setMessage(value);
-    onTyping?.();
+    if (onTyping && value.trim()) {
+      const now = Date.now();
+      if (now - lastTypingSentRef.current > typingThrottleMs) {
+        lastTypingSentRef.current = now;
+        onTyping();
+      }
+    }
 
     // Auto-resize textarea
     if (textareaRef.current) {

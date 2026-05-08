@@ -14,8 +14,10 @@ import type { UserPhoto } from "@shared/schema";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import { ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
+import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 
 export default function PhotoGallery() {
+  const maxCaptionLength = 500;
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -141,8 +143,9 @@ export default function PhotoGallery() {
     if (textarea) {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const newCaption = caption.substring(0, start) + emojiData.emoji + caption.substring(end);
-      setCaption(newCaption);
+      const nextCaption =
+        caption.substring(0, start) + emojiData.emoji + caption.substring(end);
+      setCaption(nextCaption.slice(0, maxCaptionLength));
 
       // Set cursor position after emoji
       setTimeout(() => {
@@ -151,7 +154,7 @@ export default function PhotoGallery() {
         textarea.setSelectionRange(newPosition, newPosition);
       }, 0);
     } else {
-      setCaption(caption + emojiData.emoji);
+      setCaption((caption + emojiData.emoji).slice(0, maxCaptionLength));
     }
     setEmojiPickerOpen(false);
   };
@@ -222,8 +225,11 @@ export default function PhotoGallery() {
                     placeholder="Add a caption..."
                     value={caption}
                     data-testid="input-caption"
-                    onChange={(e) => setCaption(e.target.value)}
+                    onChange={(e) =>
+                      setCaption(e.target.value.slice(0, maxCaptionLength))
+                    }
                     className="pr-12"
+                    maxLength={maxCaptionLength}
                   />
                   <Popover
                     open={emojiPickerOpen}
@@ -250,6 +256,9 @@ export default function PhotoGallery() {
                       />
                     </PopoverContent>
                   </Popover>
+                </div>
+                <div className="mt-2 text-xs text-muted-foreground text-right" data-testid="text-caption-count">
+                  {caption.length}/{maxCaptionLength}
                 </div>
               </div>
               <Button
@@ -296,7 +305,7 @@ export default function PhotoGallery() {
               <CardContent className="p-4">
                 {photo.caption && (
                   <p
-                    className="text-sm mb-3"
+                    className="text-sm mb-3 line-clamp-2"
                     data-testid={`text-caption-${photo.id}`}
                   >
                     {photo.caption}
@@ -326,14 +335,22 @@ export default function PhotoGallery() {
                       {photo.viewCount}
                     </span>
                   </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => deleteMutation.mutate(photo.id)}
-                    data-testid={`button-delete-${photo.id}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <ConfirmActionDialog
+                    title="Delete photo?"
+                    description="This action cannot be undone. The photo will be permanently removed from your gallery."
+                    confirmLabel="Delete"
+                    onConfirm={() => deleteMutation.mutate(photo.id)}
+                    confirmVariantClassName="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    trigger={
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        data-testid={`button-delete-${photo.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
                 </div>
               </CardContent>
             </Card>

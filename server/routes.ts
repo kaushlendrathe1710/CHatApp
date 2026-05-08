@@ -557,7 +557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Photo validation schema - now requires objectKey
   const createPhotoSchema = z.object({
     objectKey: z.string().min(1, "Object key is required"),
-    caption: z.string().optional(),
+    caption: z.string().max(500, "Caption must be 500 characters or less").optional(),
     isProfilePhoto: z.boolean().optional(),
   });
 
@@ -615,6 +615,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           caption,
           isProfilePhoto,
         });
+
+        if (isProfilePhoto) {
+          await storage.updateUser(userId, { profileImageUrl: photoUrl });
+        }
 
         res.json(photo);
       } catch (error) {
