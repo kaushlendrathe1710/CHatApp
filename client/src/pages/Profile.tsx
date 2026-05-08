@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
@@ -38,6 +39,8 @@ export default function Profile() {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
   const [usernameMessage, setUsernameMessage] = useState<string>("");
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -95,9 +98,66 @@ export default function Profile() {
     return () => clearTimeout(timer);
   }, [username, user?.username]);
 
+  const uploadProfilePhoto = async () => {
+    if (!profilePhotoFile) return;
+
+    setPhotoUploading(true);
+    try {
+      const uploadUrlResponse = await fetch("/api/photos/upload-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!uploadUrlResponse.ok) {
+        throw new Error("Failed to get upload URL");
+      }
+
+      const { uploadURL, objectKey } = await uploadUrlResponse.json();
+
+      const fileUploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: profilePhotoFile,
+        headers: {
+          "Content-Type": profilePhotoFile.type,
+        },
+      });
+
+      if (!fileUploadResponse.ok) {
+        throw new Error("Failed to upload profile photo");
+      }
+
+      const photoResponse = await fetch("/api/photos", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          objectKey,
+          isProfilePhoto: true,
+        }),
+      });
+
+      if (!photoResponse.ok) {
+        const errorData = await photoResponse.json();
+        throw new Error(errorData.message || "Failed to save profile photo");
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setProfilePhotoFile(null);
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
   const onSubmit = async (data: ProfileForm) => {
     setIsLoading(true);
     try {
+      if (profilePhotoFile) {
+        await uploadProfilePhoto();
+      }
+
       const response = await apiRequest("PUT", "/api/users/profile", data);
 
       if (response.ok) {
@@ -147,6 +207,33 @@ export default function Profile() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="space-y-3">
+                <FormLabel>Profile Photo</FormLabel>
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-16 w-16">
+                    <AvatarImage src={user?.profileImageUrl || undefined} />
+                    <AvatarFallback>
+                      {(user?.fullName || user?.username || "U")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-2">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) =>
+                        setProfilePhotoFile(e.target.files?.[0] || null)
+                      }
+                      disabled={isLoading || photoUploading}
+                      data-testid="input-profile-photo"
+                    />
+                    <FormDescription>
+                      Upload a square image for best results
+                    </FormDescription>
+                  </div>
+                </div>
+              </div>
               <FormField
                 control={form.control}
                 name="username"
@@ -242,11 +329,15 @@ export default function Profile() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isLoading || (usernameAvailable === false && username !== user?.username)}
+                  disabled={
+                    isLoading ||
+                    photoUploading ||
+                    (usernameAvailable === false && username !== user?.username)
+                  }
                   data-testid="button-save"
                   className="flex-1"
                 >
-                  {isLoading ? "Saving..." : "Save Changes"}
+                  {isLoading || photoUploading ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             </form>
